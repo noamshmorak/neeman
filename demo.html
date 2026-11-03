@@ -135,6 +135,7 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);margin-to
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips input{position:absolute;opacity:0;pointer-events:none}
+.remin-row{display:flex;align-items:center;gap:8px;margin-top:8px}.remin-row input{width:90px}
 .chips label{border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600;background:var(--surface);transition:all .15s}
 .chips input:checked+label{background:var(--em);color:var(--on-em);border-color:var(--em);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--brass)}
 .chips input:focus-visible+label{outline:2px solid var(--brass-hi);outline-offset:3px}
@@ -678,7 +679,7 @@ const mediaPut = (k, v) => mediaOp('readwrite', s => s.put(v, k));
 const mediaDel = k => mediaOp('readwrite', s => s.delete(k));
 let hasOrig = false, trimBlob = null, trimURL = null, trimBusy = false;
 /* free stock clip (Pexels license: free to use, no attribution required) used until the store uploads its own */
-const DEFAULT_VIDEO = 'https://videos.pexels.com/video-files/6131732/6131732-hd_1280_720_25fps.mp4';
+const DEFAULT_VIDEO = 'https://videos.pexels.com/video-files/8434091/8434091-hd_1366_720_25fps.mp4';
 let usingDefaultVideo = false;
 async function loadVideo(){
   try { const b = await mediaGet('video'); if (videoURL && !usingDefaultVideo) URL.revokeObjectURL(videoURL); usingDefaultVideo = !b; videoURL = b ? URL.createObjectURL(b) : DEFAULT_VIDEO; hasOrig = !!(await mediaGet('video-orig')); }
@@ -1292,8 +1293,12 @@ function customerFormHTML(mode, phone='', presetPid=null){
     <div class="field" ${pp?'hidden':''}><span class="lbl" id="petLbl">מי אוכל?</span><div class="chips" role="radiogroup" aria-labelledby="petLbl">${pets}</div></div>
     <div class="grid2">
       <div class="field"><label for="fPetName">שם החיה (לא חובה)</label><input id="fPetName"></div>
-      <div class="field"><label for="fDays">${mode==='join'?'בערך כמה ימים מחזיק לך שק?':'כמה ימים מחזיק לו שק?'}</label><input id="fDays" type="number" min="3" step="1" value="${(pp || S.products.find(p=>kindsFor(firstPet).includes(p.kind)) || {}).days || 30}" class="num"><span class="hint">ממולא לפי המוצר. אפשר לשנות.</span></div>
+      ${mode==='join' ? `<div class="field"><label for="fDays">בערך כמה ימים מחזיק לך שק?</label><input id="fDays" type="number" min="3" step="1" value="${(pp || S.products.find(p=>kindsFor(firstPet).includes(p.kind)) || {}).days || 30}" class="num"><span class="hint">ממולא לפי המוצר. אפשר לשנות.</span></div>` : ''}
     </div>
+    ${mode!=='join' ? `<div class="field"><span class="lbl" id="remLbl">לשלוח תזכורת בעוד:</span>
+      <div class="chips" role="radiogroup" aria-labelledby="remLbl">${[[7,'שבוע'],[14,'שבועיים'],[30,'חודש'],[60,'חודשיים']].map(([d,t])=>`<input type="radio" name="remin" id="rem-${d}" value="${d}"><label for="rem-${d}">${t}</label>`).join('')}</div>
+      <div class="remin-row"><span>או</span><input id="fDays" type="number" min="1" step="1" value="${Math.max(1, ((pp || S.products.find(p=>kindsFor(firstPet).includes(p.kind)) || {}).days || 30) - 4)}" class="num" aria-label="מספר ימים עד התזכורת"><span>ימים</span></div>
+      <span class="hint">ממולא לפי המוצר. בוחרים כפתור או כותבים מספר.</span></div>` : ''}
     <div class="field" ${pp?'hidden':''}><label for="fProd">איזה מוצר?</label><select id="fProd">${optionsFor(firstPet, presetPid)}</select></div>
     <label class="check" ${pp?'hidden':''}><input type="checkbox" id="fNow" checked><span>${mode==='join'?'קניתי את זה עכשיו':'נקנה עכשיו'}</span></label>
     <div id="fRules">${rulesChecks(firstPet, mode)}</div>
@@ -1303,15 +1308,18 @@ function customerFormHTML(mode, phone='', presetPid=null){
   </form>`;
 }
 function wireCustomerForm(mode, onDone){
-  const f = $('#custForm');
+  const f = $('#custForm'), OFF = mode==='join' ? 0 : 4;
+  const unRem = () => f.querySelectorAll('input[name=remin]').forEach(r => r.checked = false);
+  $('#fDays').addEventListener('input', unRem);
   f.addEventListener('change', e => {
     if (e.target.name==='pet'){
       const k = e.target.value;
       $('#fProd').innerHTML = optionsFor(k);
-      $('#fDays').value = prod($('#fProd').value)?.days || 30;
+      $('#fDays').value = Math.max(1,(prod($('#fProd').value)?.days || 30) - OFF); unRem();
       $('#fRules').innerHTML = rulesChecks(k, mode);
     }
-    if (e.target.id==='fProd') $('#fDays').value = prod(e.target.value).days || 30;
+    if (e.target.id==='fProd'){ $('#fDays').value = Math.max(1,(prod(e.target.value).days || 30) - OFF); unRem(); }
+    if (e.target.name==='remin') $('#fDays').value = e.target.value;
   });
   f.addEventListener('submit', e => {
     e.preventDefault();
@@ -1325,7 +1333,7 @@ function wireCustomerForm(mode, onDone){
     const pid = $('#fProd').value, p = prod(pid);
     if (!pid){ err.textContent='אין מוצר מהסוג הזה. אפשר להוסיף בהגדרות החנות.'; return; }
     const c = {id:uid(), name, phone:normPhone(phone), pet, petName:$('#fPetName').value.trim(), size:PETS[pet].def, count:1,
-      daysOverride: (Number($('#fDays').value) >= 3 && Number($('#fDays').value) !== p.days) ? Number($('#fDays').value) : null,
+      daysOverride: (() => { const d = Number($('#fDays').value) + OFF; return (d >= 3 && d !== p.days) ? d : null; })(),
       productId:pid, consent:{date:today(), source:mode==='join'?'qr':'seller'},
       purchases: $('#fNow').checked ? [{date:today(), productId:pid, price:p.price}] : [], reminders:[],
       extras: [...f.querySelectorAll('[data-rule]:checked')].map(i => ({id:uid(), ruleId:i.dataset.rule, last:today()}))};
