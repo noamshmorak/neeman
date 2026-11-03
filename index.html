@@ -3,27 +3,301 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>נאמן</title>
 <meta name="theme-color" content="#0f3a31">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<title>נאמן</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bellefair&family=Heebo:wght@300;400;500;600;700&display=swap">
-<link rel="stylesheet" href="app.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="config.js"></script>
-<script src="core.js"></script>
-<script src="smart-trim.js"></script>
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} [hidden]{display:none!important}</style>
+<style>
+/* Layout: a concierge-grade counter tool. Deep emerald header band with a brass hairline, porcelain working surface, one generous column. */
+:root{
+  --bg:#f3f5f3; --surface:#ffffff; --sunk:#edf1ee; --ink:#0f1d19; --muted:#5b6964; --line:#e1e7e3;
+  --em:#0f3a31; --em-2:#17503f; --em-ring:#1f6b58; --on-em:#f4f0e6;
+  --brass:#a9843f; --brass-hi:#c9a45c; --brass-soft:#f3ead8;
+  --accent:var(--em); --accent-ink:var(--on-em);
+  --danger:#ad3f28; --warn:#8e6210; --ok:#2e7448;
+  --shadow:0 1px 2px rgba(15,29,25,.04),0 8px 24px -12px rgba(15,29,25,.18);
+  --f-display:"Bellefair","Frank Ruhl Libre",Georgia,serif;
+  --f-body:"Heebo","Assistant",system-ui,"Segoe UI",Arial,sans-serif;
+  --r:18px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a1210; --surface:#101b18; --sunk:#15221e; --ink:#e9efec; --muted:#93a59e; --line:#22322d;
+  --em:#0c2a23; --em-2:#123a30; --em-ring:#55c2a2; --on-em:#f4f0e6;
+  --brass:#d2ae68; --brass-hi:#e2c27f; --brass-soft:#2c2618;
+  --danger:#ff8a70; --warn:#e8b65a; --ok:#74c98f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a1210; --surface:#101b18; --sunk:#15221e; --ink:#e9efec; --muted:#93a59e; --line:#22322d;
+  --em:#0c2a23; --em-2:#123a30; --em-ring:#55c2a2; --on-em:#f4f0e6;
+  --brass:#d2ae68; --brass-hi:#e2c27f; --brass-soft:#2c2618;
+  --danger:#ff8a70; --warn:#e8b65a; --ok:#74c98f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6); color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;direction:rtl;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;line-height:1.15;text-wrap:balance;margin:0;letter-spacing:.005em}
+:focus-visible{outline:2px solid var(--brass-hi);outline-offset:3px}
+.num{font-variant-numeric:tabular-nums}
+.eyebrow{font-size:.78rem;font-weight:600;letter-spacing:.14em;color:var(--brass)}
+
+/* header band */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;color:var(--on-em);
+  background:radial-gradient(120% 140% at 85% -20%,var(--em-2) 0%,var(--em) 55%);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--brass-hi) 55%,transparent)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--em)}
+.top-in{max-width:1080px;margin:0 auto;padding-block:16px 12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{width:40px;height:40px;color:var(--on-em);flex:none}
+.brand-txt{display:grid;line-height:1.1}
+.brand h1{font-size:1.75rem}
+.brand .tag{font-size:.74rem;letter-spacing:.16em;color:var(--brass-hi)}
+.store{margin-inline-start:auto;display:flex;align-items:center;gap:10px;font-weight:500;opacity:.92;font-size:.95rem}
+.demo-tag{font-size:.72rem;font-weight:600;letter-spacing:.08em;border:1px solid color-mix(in srgb,var(--brass-hi) 70%,transparent);color:var(--brass-hi);padding:2px 10px;border-radius:999px}
+.tabs{display:flex;gap:4px;overflow-x:auto;margin-top:16px;scrollbar-width:none;padding:4px;background:color-mix(in srgb,#000 22%,transparent);border-radius:999px;width:max-content;max-width:100%}
+.tabs a{color:var(--on-em);text-decoration:none;padding:7px 16px;border-radius:999px;font-weight:500;font-size:.95rem;white-space:nowrap;opacity:.78;transition:background .2s,opacity .2s}
+.tabs a:hover{opacity:1}
+.tabs a[aria-current="page"]{background:var(--on-em);color:var(--em);opacity:1;font-weight:700}
+main{max-width:1080px;margin:0 auto;padding-block:30px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:24px}
+
+/* greeting */
+.hello{display:grid;gap:6px}
+.hello h2{font-size:clamp(2rem,4.4vw,2.8rem)}
+.hello .sub{font-size:1.05rem}
+
+/* pieces */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px;box-shadow:var(--shadow)}
+.panel h2{font-size:1.55rem;margin-bottom:4px}
+.sub{color:var(--muted);margin:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;box-shadow:var(--shadow);display:grid;gap:2px}
+.kpi b{font-family:var(--f-display);font-size:2.5rem;font-weight:400;line-height:1}
+.kpi span{color:var(--muted);font-size:.9rem}
+.kpi.hero{background:linear-gradient(150deg,var(--em-2),var(--em));color:var(--on-em);border-color:color-mix(in srgb,var(--brass-hi) 40%,transparent);position:relative;overflow:hidden}
+.kpi.hero::after{content:"";position:absolute;inset:auto -30px -40px auto;width:120px;height:120px;border-radius:50%;border:1px solid color-mix(in srgb,var(--brass-hi) 45%,transparent)}
+.kpi.hero span{color:var(--brass-hi)}
+.kpi.gold b{color:var(--brass)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 18px;font-weight:600;cursor:pointer;text-decoration:none;color:var(--ink);min-height:44px;transition:transform .15s,border-color .15s,box-shadow .15s}
+.btn:hover{border-color:var(--brass);box-shadow:0 4px 14px -8px rgba(0,0,0,.35)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--em);color:var(--on-em);border-color:var(--em)}
+.btn.primary:hover{background:var(--em-2);border-color:var(--brass)}
+.btn.wa{background:#1b8a54;color:#fff;border-color:#1b8a54}
+.btn.wa::before{content:"";width:16px;height:16px;flex:none;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.4-.7-2.8-1.1-4.6-4-4.8-4.2-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l2 .9c.3.2.5.2.5.4.1.1.1.7-.1 1.3z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.4-.7-2.8-1.1-4.6-4-4.8-4.2-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l2 .9c.3.2.5.2.5.4.1.1.1.7-.1 1.3z'/%3E%3C/svg%3E") center/contain no-repeat}
+.btn.big{font-size:1.1rem;padding:14px 26px;min-height:56px}
+.btn.ghost{background:transparent;box-shadow:none}
+.btn.danger{color:var(--danger)}
+.link{background:none;border:0;padding:0;color:var(--em-ring);font-weight:600;cursor:pointer;font-size:.9rem}
+.link:hover{text-decoration:underline}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spacer{flex:1}
+
+/* customer rows */
+.list{display:grid;gap:12px;margin-top:18px}
+.cust{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:14px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);transition:border-color .2s,box-shadow .2s}
+.cust:hover{border-color:color-mix(in srgb,var(--brass) 55%,var(--line));box-shadow:var(--shadow)}
+.cust .who{min-width:0;display:grid;gap:2px}
+.cust .who strong{font-size:1.1rem;font-weight:700}
+.cust .who .meta{color:var(--muted);font-size:.92rem;overflow-wrap:anywhere}
+.cust .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pill{display:inline-block;font-size:.76rem;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;letter-spacing:.02em}
+.st-overdue{background:color-mix(in srgb,var(--danger) 13%,transparent);color:var(--danger)}
+.st-due{background:var(--brass-soft);color:var(--warn)}
+.st-followup{background:color-mix(in srgb,var(--danger) 9%,transparent);color:var(--danger)}
+.st-sent{background:var(--sunk);color:var(--muted)}
+.st-soon{background:color-mix(in srgb,var(--em-ring) 12%,transparent);color:var(--em-ring)}
+.st-ordered{background:color-mix(in srgb,var(--brass) 22%,transparent);color:var(--warn)}
+.reply-btns{display:grid;gap:10px}
+.st-ok{background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok)}
+/* days-left ring */
+.ring{width:58px;height:58px;position:relative;flex:none;display:grid;place-items:center;align-content:center}
+.ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ring .trk{fill:none;stroke:var(--sunk);stroke-width:4}
+.ring .val{fill:none;stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.ring b{font-family:var(--f-display);font-weight:400;font-size:1.35rem;line-height:1;position:relative}
+.ring small{font-size:.62rem;color:var(--muted);position:relative;letter-spacing:.06em}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;font-family:var(--f-display);font-size:1.2rem}
+details.more summary{cursor:pointer;font-weight:600;color:var(--muted);margin-top:18px}
+
+/* forms */
+.form{display:grid;gap:16px}
+.field{display:grid;gap:6px}
+.field label,.lbl{font-weight:600;font-size:.95rem}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 14px;min-height:48px;width:100%;transition:border-color .15s,box-shadow .15s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px color-mix(in srgb,var(--brass) 22%,transparent)}
+.field textarea{min-height:120px;resize:vertical}
+.hint{color:var(--muted);font-size:.86rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips label{border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600;background:var(--surface);transition:all .15s}
+.chips input:checked+label{background:var(--em);color:var(--on-em);border-color:var(--em);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--brass)}
+.chips input:focus-visible+label{outline:2px solid var(--brass-hi);outline-offset:3px}
+.check{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:12px;background:var(--sunk)}
+.check input{width:22px;height:22px;margin-top:2px;flex:none;accent-color:var(--em)}
+.err{color:var(--danger);font-weight:600;min-height:1.2em}
+.search{font-size:1.5rem!important;min-height:64px!important;letter-spacing:.06em;text-align:center;font-family:var(--f-display)}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:right}
+th{font-size:.78rem;color:var(--muted);font-weight:600;letter-spacing:.08em}
+td input,td select{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 10px;width:100%}
+
+/* drawer */
+.overlay{position:fixed;inset:0;background:color-mix(in srgb,#06110e 55%,transparent);backdrop-filter:blur(3px);z-index:20;display:flex;justify-content:flex-start}
+.drawer{background:var(--bg);width:min(540px,100%);height:100%;overflow-y:auto;padding:24px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px));display:grid;gap:18px;align-content:start;box-shadow:0 0 60px rgba(0,0,0,.3)}
+.calc{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:6px 18px;display:grid}
+.calc div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.calc div:last-child{border-bottom:0}
+.calc div span:first-child{color:var(--muted)}
+.hist{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.hist li{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;background:var(--surface);border-radius:12px;border:1px solid var(--line)}
+.msg{white-space:pre-wrap;background:#d9fdd3;color:#111b21;border-radius:14px 14px 14px 4px;padding:12px 16px;font-size:.97rem;max-width:440px;box-shadow:0 1px 1px rgba(0,0,0,.12)}
+
+.toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--em);color:var(--on-em);border:1px solid color-mix(in srgb,var(--brass-hi) 50%,transparent);padding:12px 22px;border-radius:999px;font-weight:600;z-index:30;max-width:calc(100% - 32px);box-shadow:0 12px 30px -10px rgba(0,0,0,.45)}
+
+/* ROI banner */
+.roi{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;background:linear-gradient(150deg,var(--em-2),var(--em));color:var(--on-em);border-radius:var(--r);padding:26px 28px;border:1px solid color-mix(in srgb,var(--brass-hi) 40%,transparent)}
+.roi h2{font-size:clamp(1.5rem,3.4vw,2.1rem)}
+.roi p{margin:6px 0 0;opacity:.85}
+.roi .mult{font-family:var(--f-display);font-size:clamp(3rem,8vw,4.6rem);line-height:1;color:var(--brass-hi)}
+@media (max-width:560px){.roi{grid-template-columns:1fr}}
+
+/* kiosk */
+.kiosk{min-height:100%;display:grid;place-items:center;color:var(--on-em);text-align:center;padding-block:32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:radial-gradient(90% 70% at 50% 0%,#1d5a4a 0%,#0f3a31 45%,#081f1a 100%)}
+.kiosk-in{display:grid;gap:22px;justify-items:center;max-width:760px}
+.kiosk .logo{width:54px;height:54px}
+.kiosk .k-store{font-size:.85rem;letter-spacing:.24em;color:#e2c27f}
+.kiosk h1{font-size:clamp(2.2rem,6.4vw,4rem)}
+.kiosk p{font-size:clamp(1.05rem,2.6vw,1.35rem);margin:0;opacity:.85;font-weight:300}
+.qrbox{background:#fff;padding:20px;border-radius:24px;box-shadow:0 0 0 1px #e2c27f,0 0 0 10px rgba(226,194,127,.16),0 30px 60px -20px rgba(0,0,0,.6)}
+.qrbox img,.qrbox canvas{display:block;width:min(290px,66vw)!important;height:auto!important}
+.kiosk .k-acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.kiosk .btn{background:transparent;color:#f4f0e6;border-color:rgba(226,194,127,.5)}
+.kiosk .btn:hover{border-color:#e2c27f}
+.kiosk .note{font-size:.82rem;opacity:.6;max-width:480px}
+
+.kiosk{position:relative;overflow:hidden}
+.k-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.k-shade{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(8,31,26,.5) 0%,rgba(8,31,26,.72) 45%,rgba(8,31,26,.9) 100%)}
+.kiosk-in{position:relative;z-index:1}
+.has-video .kiosk-in h1,.has-video .kiosk-in p{text-shadow:0 2px 18px rgba(0,0,0,.45)}
+.j-video{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:14px;max-width:100%;display:block;margin-bottom:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.vid-zone{display:grid;gap:14px;justify-items:center;padding:22px;border:1.5px dashed color-mix(in srgb,var(--brass) 60%,var(--line));border-radius:16px;background:var(--sunk);text-align:center;transition:background .15s,border-color .15s}
+.vid-zone.has{justify-items:stretch;border-style:solid;border-color:var(--line);background:var(--surface)}
+.vid-zone.over{background:var(--brass-soft);border-color:var(--brass)}
+.vid-zone:focus-within{border-color:var(--brass)}
+.vid-empty{display:grid;gap:4px}
+.vid-empty b{font-family:var(--f-display);font-weight:400;font-size:1.4rem}
+.vid-prev{width:100%;max-height:340px;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:#000;max-width:100%}
+.trim-box{display:grid;gap:12px;padding:16px;border-radius:14px;background:var(--sunk);text-align:right}
+.trim-step{display:flex;justify-content:space-between;gap:12px}
+.trim-bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.trim-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-hi));transition:width .2s}
+.trim-tl{position:relative;height:26px;border-radius:8px;background:var(--line);overflow:hidden}
+.trim-tl i{position:absolute;top:0;bottom:0;background:var(--em-ring);border-inline:1px solid var(--surface)}
+
+/* auth & onboarding */
+.auth{min-height:100%;display:grid;place-items:center;padding-block:32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:radial-gradient(90% 70% at 50% 0%,#1d5a4a 0%,#0f3a31 45%,#081f1a 100%)}
+.auth-card{width:min(440px,100%);background:var(--surface);border-radius:22px;padding:28px;display:grid;gap:18px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6);border:1px solid color-mix(in srgb,var(--brass-hi) 40%,transparent)}
+.auth-card .logo{color:var(--em);width:46px;height:46px}
+.auth-card h1{font-size:2rem}
+.seg{display:flex;background:var(--sunk);border-radius:999px;padding:4px}
+.seg button{flex:1;border:0;background:transparent;border-radius:999px;padding:8px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.ok-msg{color:var(--ok);font-weight:600}
+.loading{min-height:100%;display:grid;place-items:center;color:var(--muted);font-family:var(--f-display);font-size:1.4rem}
+.linkbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--sunk);border-radius:12px;padding:10px 14px}
+.linkbox code{direction:ltr;overflow-wrap:anywhere;flex:1;min-width:0;font-size:.9rem}
+
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%}
+/* modal, POS, rules */
+.prod-picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.pick-prod{display:grid;gap:2px;text-align:right;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 14px;cursor:pointer;color:var(--ink)}
+.pick-prod span{color:var(--muted);font-size:.85rem}
+.pick-prod[aria-pressed=true]{background:var(--em);color:var(--on-em);border-color:var(--em);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--brass)}
+.pick-prod[aria-pressed=true] span{color:var(--brass-hi)}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin:6px 0}
+.pin-dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--em);display:block}
+.pin-dots i.on{background:var(--em)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;direction:ltr}
+.pin-pad button{min-height:62px;font-size:1.5rem;font-family:var(--f-display);border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.pin-pad button:active{background:var(--sunk)}
+.pin-err{color:var(--danger);text-align:center;min-height:1.3em;font-weight:600}
+.idle-bar{position:fixed;inset:auto 0 0 0;z-index:40;background:var(--em);color:var(--on-em);padding:14px max(16px,env(safe-area-inset-left,0px));padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;align-items:center;justify-content:center;font-weight:600;border-top:1px solid var(--brass-hi)}
+.idle-bar button{background:var(--on-em);color:var(--em);border:0;border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer}
+.pet-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding:4px;background:var(--sunk);border-radius:999px;width:max-content;max-width:100%}
+.pet-tab{border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:600;cursor:pointer;color:var(--muted)}
+.pet-tab span{font-size:.78rem;opacity:.7;margin-inline-start:4px}
+.pet-tab[aria-selected=true]{background:var(--em);color:var(--on-em)}
+.pet-pane{display:grid;gap:16px;margin-top:16px}
+.pet-h{font-size:1.25rem}
+[hidden]{display:none!important}
+.overlay.center{justify-content:center;align-items:center;padding:16px}
+.modal{background:var(--bg);width:min(560px,100%);max-height:calc(100% - 32px);overflow-y:auto;border-radius:22px;padding:24px;display:grid;gap:14px;box-shadow:0 30px 70px -20px rgba(0,0,0,.55);border:1px solid color-mix(in srgb,var(--brass) 45%,var(--line))}
+.modal h2{font-size:1.7rem}
+.qrwrap{display:grid;justify-items:center;padding-block:6px}
+.qrwrap .qrbox img,.qrwrap .qrbox canvas{width:min(240px,60vw)!important}
+.pick{display:grid;gap:2px;text-align:right;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 16px;cursor:pointer;color:var(--ink);transition:border-color .15s}
+.pick:hover,.pick:focus-visible{border-color:var(--brass)}
+.pick b{font-size:1.05rem}
+.pick span{color:var(--muted);font-size:.9rem}
+.pos-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(226,194,127,.5);background:transparent;color:var(--on-em);border-radius:999px;padding:3px 11px;font-size:.76rem;font-weight:600;cursor:pointer}
+.pos-chip i,.pos-opt .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#5fd38d;box-shadow:0 0 0 3px rgba(95,211,141,.22);flex:none}
+.pos-opt .dot{margin-inline-end:8px;vertical-align:middle}
+.pos-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px}
+.pos-opt{border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:10px;align-content:start;background:var(--surface)}
+.pos-opt.on{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.pos-opt b{font-size:1.05rem}
+.pos-opt>span{color:var(--muted);font-size:.92rem}
+.rules{display:grid;gap:14px;margin-top:14px}
+.rule{border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:12px;background:var(--surface)}
+.rule textarea{min-height:90px}
+.pill.rule-pill{background:var(--brass-soft);color:var(--warn)}
+.sugs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn.sm{min-height:34px;padding:5px 12px;font-size:.88rem}
+.xadd{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+.xadd .field{flex:1;min-width:160px}
+.preset{display:grid;gap:2px;padding:14px 16px;border-radius:14px;background:var(--brass-soft)}
+.preset b{font-size:1.1rem}
+@media (prefers-reduced-motion:no-preference){.pos-chip i{animation:beat 2.4s ease-in-out infinite}@keyframes beat{50%{box-shadow:0 0 0 6px rgba(95,211,141,0)}}}
+
+/* join */
+.join{max-width:480px;margin:0 auto;padding-block:20px 50px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.join-head{background:radial-gradient(120% 140% at 85% -20%,var(--em-2) 0%,var(--em) 60%);color:var(--on-em);border-radius:22px;padding:26px 24px;border:1px solid color-mix(in srgb,var(--brass-hi) 40%,transparent);display:grid;gap:8px}
+.join-head h1{font-size:2rem}
+.join-head p{margin:0;opacity:.88}
+.back-link{color:var(--muted);font-weight:600;text-decoration:none;font-size:.9rem}
+@media (max-width:620px){
+  .cust{grid-template-columns:auto 1fr}
+  .cust .acts{grid-column:1/-1;justify-content:stretch}
+  .cust .acts .btn{flex:1}
+  .store{margin-inline-start:0;width:100%}
+  .panel{padding:18px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .toast{animation:pop .25s ease-out}@keyframes pop{from{opacity:0;transform:translate(-50%,10px)}}
+  main>*{animation:rise .45s ease-out both}main>*:nth-child(2){animation-delay:.05s}main>*:nth-child(3){animation-delay:.1s}main>*:nth-child(4){animation-delay:.15s}
+  @keyframes rise{from{transform:translateY(8px)}}
+}
+</style>
 </head>
 <body>
-<div id="shell" hidden>
+
+<div id="shell">
   <header class="top">
     <div class="top-in">
       <div class="brand">
-        <span id="logoSlot"></span>
+        <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><path d="M11 7h18l4 7v19a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V14z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 14h26" stroke="currentColor" stroke-width="1.6"/><circle cx="20" cy="25" r="6.5" fill="none" stroke="#e2c27f" stroke-width="1.6"/><path d="M20 21v4l2.8 1.8" stroke="#e2c27f" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
         <div class="brand-txt"><h1>נאמן</h1><span class="tag">מערכת שימור לקוחות לחנויות חיות</span></div>
-        <div class="store"><span id="storeLabel"></span></div>
+        <div class="store"><span id="storeLabel"></span><button class="pos-chip" type="button" data-act="posdemo" title="הדגמה: מכירה שמגיעה מהקופה"><i></i>קופה מחוברת</button></div>
       </div>
       <nav class="tabs" aria-label="מסכים">
         <a href="#today">היום</a>
@@ -41,65 +315,389 @@
 <div id="overlayRoot"></div>
 
 <script>
-const $ = s => document.querySelector(s);
-const sb = makeClient();
-let S = null;            // {store, products, customers}
-let videoURL = null;
-let trimBlob = null, trimURL = null, trimBusy = false;
-const MAX_VIDEO_MB = 60;
+/* SmartTrim — automatic "best moments" edit, fully in the browser (no server, no API key).
+   analyze(src)  -> scores the clip every ~0.5s on sharpness, light, contrast and motion
+                    (drops blurry, dark and shaky parts) and picks the best ~18 seconds.
+   render(src, segments) -> plays the chosen parts onto a canvas and records a new silent clip,
+                    with a short dip-to-black between parts. Takes about as long as the result.  */
+(function (g) {
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
-/* ---------- small ui ---------- */
-function toast(t){
-  const el = document.createElement('div'); el.className='toast'; el.setAttribute('role','status'); el.textContent=t;
-  document.body.appendChild(el); setTimeout(()=>el.remove(), 3400);
+  function once(el, ev) {
+    return new Promise((res, rej) => {
+      const ok = () => { off(); res(); };
+      const bad = () => { off(); rej(el.error || new Error(ev + ' failed')); };
+      const off = () => { el.removeEventListener(ev, ok); el.removeEventListener('error', bad); };
+      el.addEventListener(ev, ok); el.addEventListener('error', bad);
+    });
+  }
+  async function openVideo(src) {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none';
+    document.body.appendChild(v);
+    v.src = src;
+    await once(v, 'loadeddata');
+    return v;
+  }
+  function closeVideo(v) { try { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } catch (e) {} }
+  async function seek(v, t) {
+    if (Math.abs(v.currentTime - t) < 0.02) return;
+    const p = once(v, 'seeked'); v.currentTime = t; await p;
+  }
+
+  async function analyze(src, opts = {}) {
+    const target = opts.target || 18, onProgress = opts.onProgress || (() => {});
+    const v = await openVideo(src);
+    try {
+      const dur = v.duration;
+      if (!isFinite(dur) || dur <= 0) throw new Error('לא הצלחתי לקרוא את אורך הסרטון');
+      const W = 96, H = Math.max(32, Math.round(96 * (v.videoHeight || 9) / (v.videoWidth || 16)));
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      const span = Math.min(dur, 240);                 // analyse up to 4 minutes
+      const step = Math.max(0.4, span / 200);
+      const samples = []; let prev = null;
+      for (let t = 0.15; t < span - 0.1; t += step) {
+        await seek(v, t);
+        ctx.drawImage(v, 0, 0, W, H);
+        const d = ctx.getImageData(0, 0, W, H).data, n = W * H, gray = new Float32Array(n);
+        let sum = 0;
+        for (let i = 0, j = 0; j < n; i += 4, j++) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; gray[j] = y; sum += y; }
+        const mean = sum / n;
+        let ls = 0, ls2 = 0, k = 0;
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+          const p = y * W + x, L = 4 * gray[p] - gray[p - 1] - gray[p + 1] - gray[p - W] - gray[p + W];
+          ls += L; ls2 += L * L; k++;
+        }
+        const sharp = ls2 / k - (ls / k) ** 2;
+        let vv = 0; for (let j = 0; j < n; j++) vv += (gray[j] - mean) ** 2;
+        let motion = 0; if (prev) { for (let j = 0; j < n; j++) motion += Math.abs(gray[j] - prev[j]); motion /= n; }
+        prev = gray;
+        samples.push({ t, mean, sharp, contrast: Math.sqrt(vv / n), motion });
+        onProgress(Math.min(1, t / span));
+      }
+      if (!samples.length) throw new Error('הסרטון קצר מדי');
+
+      const ls_ = samples.map(s => Math.log1p(s.sharp));
+      const lo = Math.min(...ls_), hi = Math.max(...ls_);
+      samples.forEach((s, i) => {
+        const sharpN = (ls_[i] - lo) / ((hi - lo) || 1);
+        const light = (s.mean < 35 || s.mean > 228) ? 0 : 1 - Math.abs(s.mean - 130) / 130 * 0.6;
+        const m = s.motion;          // a little life is good; a lot means shaking or a whip pan
+        const motionN = m < 1 ? 0.55 : m < 4 ? 0.7 + (m - 1) / 3 * 0.3 : m < 14 ? 1 : clamp(1 - (m - 14) / 16, 0, 1);
+        s.score = sharpN * 0.45 + light * 0.2 + motionN * 0.2 + clamp(s.contrast / 50, 0, 1) * 0.15;
+        s.bad = s.mean < 30 || sharpN < 0.12 || m > 28;
+      });
+
+      const WIN = 3, windows = [];
+      for (let a = 0; a < span - 0.5; a += WIN) {
+        const b = Math.min(span, a + WIN), ss = samples.filter(s => s.t >= a && s.t < b);
+        if (!ss.length) continue;
+        const avg = ss.reduce((x, s) => x + s.score, 0) / ss.length;
+        const badShare = ss.filter(s => s.bad).length / ss.length;
+        windows.push({ a, b, score: avg * (1 - badShare * 0.8) });
+      }
+      let segments;
+      if (span <= target + 1) segments = [{ a: 0, b: span }];
+      else {
+        const pick = []; let total = 0;
+        for (const w of [...windows].sort((x, y) => y.score - x.score)) { if (total >= target) break; pick.push(w); total += w.b - w.a; }
+        pick.sort((x, y) => x.a - y.a);
+        segments = [];
+        for (const w of pick) { const last = segments[segments.length - 1]; if (last && w.a - last.b < 0.01) last.b = w.b; else segments.push({ a: w.a, b: w.b }); }
+      }
+      const kept = segments.reduce((x, s) => x + s.b - s.a, 0);
+      return { duration: dur, analyzed: span, segments, kept, windows };
+    } finally { closeVideo(v); }
+  }
+
+  function pickType() {
+    if (!g.MediaRecorder) return null;
+    return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find(t => MediaRecorder.isTypeSupported(t)) || null;
+  }
+
+  async function render(src, segments, opts = {}) {
+    const onProgress = opts.onProgress || (() => {}), FADE = 0.3;
+    const type = pickType();
+    if (!type) throw new Error('הדפדפן הזה לא יודע ליצור סרטון. נסו בכרום במחשב.');
+    const v = await openVideo(src);
+    let raf = 0;
+    try {
+      const scale = Math.min(1, (opts.maxW || 1280) / (v.videoWidth || 1280));
+      const W = Math.max(2, Math.round((v.videoWidth || 1280) * scale / 2) * 2), H = Math.max(2, Math.round((v.videoHeight || 720) * scale / 2) * 2);
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      const rec = new MediaRecorder(c.captureStream(30), { mimeType: type, videoBitsPerSecond: 4000000 });
+      const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      const stopped = new Promise(r => { rec.onstop = r; });
+      const total = segments.reduce((x, s) => x + s.b - s.a, 0); let doneT = 0;
+      let cur = segments[0];
+      const draw = () => {
+        ctx.drawImage(v, 0, 0, W, H);
+        const into = v.currentTime - cur.a, left = cur.b - v.currentTime;
+        const alpha = clamp(1 - Math.min(into, left) / FADE, 0, 1);
+        if (alpha > 0) { ctx.fillStyle = 'rgba(0,0,0,' + alpha + ')'; ctx.fillRect(0, 0, W, H); }
+        raf = requestAnimationFrame(draw);
+      };
+      for (let i = 0; i < segments.length; i++) {
+        cur = segments[i];
+        await seek(v, cur.a);
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+        if (i === 0) rec.start(250); else if (rec.state === 'paused') rec.resume();
+        draw();
+        await v.play();
+        await new Promise(res => {
+          const tick = () => {
+            onProgress(Math.min(1, (doneT + Math.max(0, v.currentTime - cur.a)) / total));
+            if (v.currentTime >= cur.b - 0.03 || v.ended) res(); else setTimeout(tick, 25);
+          };
+          tick();
+        });
+        v.pause(); cancelAnimationFrame(raf);
+        doneT += cur.b - cur.a;
+        if (i < segments.length - 1 && rec.state === 'recording') rec.pause();
+      }
+      rec.stop(); await stopped;
+      onProgress(1);
+      return new Blob(chunks, { type: type.split(';')[0] });
+    } finally { cancelAnimationFrame(raf); closeVideo(v); }
+  }
+
+  g.SmartTrim = { analyze, render, supported: () => !!pickType() };
+})(window);
+
+</script>
+<script>
+/* ---------- dates ---------- */
+const DAY = 86400000;
+const ymd = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate()+n); return ymd(d); };
+const diff = (a, b) => Math.round((parseD(a) - parseD(b)) / DAY);
+const DOW = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+const fmtD = s => { const d = parseD(s); return d.getDate()+'.'+(d.getMonth()+1); };
+const fmtLong = s => { const d = parseD(s); return 'יום '+DOW[d.getDay()]+', '+d.getDate()+'.'+(d.getMonth()+1); };
+const ago = s => { const n = diff(today(), s); return n===0?'היום':n===1?'אתמול':'לפני '+n+' ימים'; };
+const money = n => '₪'+Math.round(n).toLocaleString('he-IL');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => crypto.randomUUID();
+
+/* ---------- domain ---------- */
+const PETS = {
+  dog:   {label:'כלב',          size:'משקל הכלב (ק"ג)', def:15, weight:true,  the:'הכלב'},
+  cat:   {label:'חתול',         size:'משקל החתול (ק"ג)', def:4, weight:true,  the:'החתול'},
+  rabbit:{label:'ארנב',         size:'כמה ארנבים',        def:1, weight:false, the:'הארנב'},
+  hens:  {label:'תרנגולות',     size:'כמה תרנגולות',      def:6, weight:false, the:'התרנגולות'},
+  bird:  {label:'תוכים/ציפורים', size:'כמה ציפורים',      def:2, weight:false, the:'הציפורים'}
+};
+const KINDS = {dog:'מזון לכלב', cat:'מזון לחתול', litter:'חול לחתול', rabbit:'מזון לארנב', hens:'מזון לתרנגולות', bird:'מזון לתוכים'};
+const kindsFor = pet => pet==='cat' ? ['cat','litter'] : [pet];
+
+/* grams per day. Rough starting estimates; real purchase intervals replace them once a customer has bought twice. */
+function dailyGrams(c, p){
+  const n = Number(c.size)||1, cnt = Number(c.count)||1;
+  switch(p.kind){
+    case 'dog': return 30*Math.pow(n,0.75)*cnt;   // ~ maintenance energy / 3.5 kcal per gram
+    case 'cat': return 13*n*cnt;
+    case 'litter': return 280*cnt;
+    case 'rabbit': return 60*n;
+    case 'hens': return 120*n;
+    case 'bird': return 30*n;
+  }
+  return 100;
 }
-function fail(e, fallback){ console.error(e); toast(fallback || 'משהו השתבש. בדקו את החיבור לאינטרנט ונסו שוב.'); }
-function showFull(html){ $('#shell').hidden = true; $('#full').hidden = false; $('#full').innerHTML = html; }
 
-/* ---------- domain on top of loaded state ---------- */
+/* ---------- state: loaded from Supabase, every change synced back ---------- */
+const sb = (window.supabase && window.LSN_CONFIG && !String(window.LSN_CONFIG.SUPABASE_URL).includes('YOUR-PROJECT'))
+  ? window.supabase.createClient(window.LSN_CONFIG.SUPABASE_URL, window.LSN_CONFIG.SUPABASE_ANON_KEY) : null;
+let S = null, B = null;          // S = what the screens use, B = rows as last saved
+const TPL_FALLBACK = 'היי {שם}, כאן {חנות}.\nלפי החישוב שלנו ל{חיה} נשאר {מה} {ימים}.\nלהכין לך {מוצר}?\n(להפסקת תזכורות השב/י "הסר")';
+const appBase = () => location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+const joinUrl = (pid, kiosk) => appBase() + 'join.html?s=' + encodeURIComponent(S.store.slug) + (pid ? '&p=' + pid : '') + (kiosk ? '&k=1' : '');
+
+async function loadAll(store){
+  const sid = store.id, since = addDays(today(), -400), evSince = addDays(today(), -14);
+  const q = (t, cols='*') => sb.from(t).select(cols).eq('store_id', sid);
+  const [pr, cu, pu, re, ru, cr, ev] = await Promise.all([
+    q('products').order('created_at'),
+    q('customers').eq('opted_out', false),
+    q('purchases', 'id,customer_id,product_id,price,date,src').gte('date', since).limit(20000),
+    q('reminders', 'id,customer_id,date').gte('date', since).limit(20000),
+    q('rules').order('created_at'),
+    q('customer_rules', 'id,customer_id,rule_id,last'),
+    q('events', 'customer_name,text,date,created_at').gte('date', evSince).order('created_at', {ascending:false}).limit(50)
+  ]);
+  for (const r of [pr,cu,pu,re,ru,cr,ev]) if (r.error) throw r.error;
+  const group = rows => rows.reduce((m,x) => ((m[x.customer_id] ||= []).push(x), m), {});
+  const P = group(pu.data), R = group(re.data), X = group(cr.data);
+  S = {
+    store: {id:store.id, slug:store.slug, name:store.name, whatsapp:store.whatsapp||'', pin:store.pin||'1234', autoKiosk:store.auto_kiosk!==false,
+            templates:{...defaultTemplates(), ...(store.templates||{})}, template:TPL_FALLBACK, video_path:store.video_path, video_orig_path:store.video_orig_path},
+    products: pr.data.map(p => ({id:p.id, name:p.name, kind:p.kind, kg:Number(p.kg), days:p.days||null, price:Number(p.price), barcode:p.barcode||'', active:p.active})),
+    rules: ru.data.map(r => ({id:r.id, name:r.name, pets:r.pets||[], every:r.every, template:r.template})),
+    customers: cu.data.map(c => ({
+      id:c.id, name:c.name, phone:c.phone, pet:c.pet, petName:c.pet_name||'', size:Number(c.size)||1, count:c.count||1, productId:c.product_id,
+      daysOverride:c.days_override||null, replyToken:c.reply_token,
+      consent:{date:String(c.consent_at).slice(0,10), source:c.consent_source},
+      pendingOrder: c.pending_product ? {date:c.pending_at||today(), productId:c.pending_product} : undefined,
+      purchases:(P[c.id]||[]).map(p => ({id:p.id, date:p.date, productId:p.product_id, price:Number(p.price), src:p.src})).sort((a,b)=>a.date<b.date?-1:1),
+      reminders:(R[c.id]||[]).map(r => ({id:r.id, date:r.date})).sort((a,b)=>a.date<b.date?-1:1),
+      extras:(X[c.id]||[]).map(x => ({id:x.id, ruleId:x.rule_id, last:x.last}))
+    })),
+    replyLog: ev.data.map(e => ({date:e.date, name:e.customer_name||'', t:e.text})),
+    posLog: (S && S.posLog) || []
+  };
+  S.products = S.products.filter(p => p.active !== false || S.customers.some(c => c.productId===p.id));
+  lastEventAt = ev.data[0]?.created_at || '';
+  B = rowsOf(S);
+  await loadVideo();
+}
+
+function rowsOf(S){
+  const sid = S.store.id, out = {store:{name:S.store.name, whatsapp:S.store.whatsapp || null, pin:S.store.pin, auto_kiosk:S.store.autoKiosk!==false, templates:S.store.templates},
+    products:{}, rules:{}, customers:{}, purchases:{}, reminders:{}, customer_rules:{}};
+  for (const p of S.products) out.products[p.id] = {id:p.id, store_id:sid, name:p.name, kind:p.kind, kg:Number(p.kg)||1, days:p.days?Math.round(p.days):null, price:Number(p.price)||0, barcode:p.barcode||null, active:p.active!==false};
+  for (const r of S.rules) out.rules[r.id] = {id:r.id, store_id:sid, name:r.name, pets:r.pets, every:Number(r.every)||30, template:r.template||''};
+  for (const c of S.customers){
+    c.replyToken ||= crypto.randomUUID();
+    out.customers[c.id] = {id:c.id, store_id:sid, name:c.name, phone:c.phone, pet:c.pet, pet_name:c.petName||null, size:Number(c.size)||1, count:Number(c.count)||1,
+      product_id:c.productId||null, days_override:c.daysOverride||null, consent_source:c.consent?.source||'seller', consent_at:c.consent?.date||today(),
+      pending_product:c.pendingOrder?.productId||null, pending_at:c.pendingOrder?.date||null, reply_token:c.replyToken, opted_out:false};
+    for (const p of c.purchases){ p.id ||= crypto.randomUUID(); out.purchases[p.id] = {id:p.id, store_id:sid, customer_id:c.id, product_id:p.productId||null, price:Number(p.price)||0, date:p.date, src:p.src||'manual'}; }
+    for (const r of c.reminders){ r.id ||= crypto.randomUUID(); out.reminders[r.id] = {id:r.id, store_id:sid, customer_id:c.id, date:r.date}; }
+    for (const x of (c.extras||[])){ x.id ||= crypto.randomUUID(); out.customer_rules[x.id] = {id:x.id, store_id:sid, customer_id:c.id, rule_id:x.ruleId, last:x.last}; }
+  }
+  return JSON.parse(JSON.stringify(out));
+}
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+let syncChain = Promise.resolve(), syncTimer = null, syncing = false, pendingSave = false;
+function save(){
+  if (!S || !B) return;
+  clearTimeout(syncTimer); pendingSave = true;
+  syncTimer = setTimeout(() => { syncChain = syncChain.then(syncNow).catch(e => { console.error(e); toast('השמירה נכשלה: '+(e.message||'בדקו את האינטרנט')); }); }, 200);
+}
+async function syncNow(){
+  syncing = true; pendingSave = false;
+  try {
+    const N = rowsOf(S), sid = S.store.id;
+    const chk = r => { if (r.error) throw r.error; };
+    if (!same(N.store, B.store)) chk(await sb.from('stores').update(N.store).eq('id', sid));
+    for (const t of ['products','rules','customers','purchases','reminders','customer_rules']){
+      const up = Object.values(N[t]).filter(r => !same(r, B[t][r.id]));
+      if (up.length) chk(await sb.from(t).upsert(up));
+    }
+    const gone = t => Object.keys(B[t]).filter(id => !N[t][id]);
+    for (const id of gone('customer_rules')) chk(await sb.from('customer_rules').delete().eq('id', id));
+    for (const id of gone('rules')) chk(await sb.from('rules').delete().eq('id', id));
+    const gc = gone('customers'); if (gc.length) chk(await sb.from('customers').update({opted_out:true}).in('id', gc));
+    for (const id of gone('products')) chk(await sb.from('products').delete().eq('id', id));
+    B = N;
+  } finally { syncing = false; }
+}
+/* new sign-ups from the QR and customer answers arrive from other phones: check every 8 seconds */
+let lastEventAt = '';
+setInterval(async () => {
+  if (!S || syncing || pendingSave || trimBusy || document.hidden) return;
+  if ($('#overlayRoot').innerHTML || document.activeElement?.matches?.('input,textarea,select')) return;
+  try {
+    const {data} = await sb.from('events').select('created_at').eq('store_id', S.store.id).order('created_at', {ascending:false}).limit(1);
+    const latest = data?.[0]?.created_at || '';
+    if (latest && latest !== lastEventAt){
+      const {data:store} = await sb.from('stores').select('*').eq('id', S.store.id).single();
+      await loadAll(store);
+      const h = location.hash || '#today';
+      if (h !== '#kiosk') route(); else toast('לקוח חדש נרשם');
+    }
+  } catch(e){ /* offline: try again next round */ }
+}, 8000);
+
+function defaultTemplates(){
+  const off = '\n(להפסקת תזכורות השב/י "הסר")';
+  return {
+    dog: 'היי {שם}, כאן {חנות}.\nלפי החישוב שלנו ל{חיה} נשאר אוכל {ימים}.\nלהכין לך שוב {מוצר}? אפשר לאסוף או שנביא עד הבית.'+off,
+    cat: 'היי {שם}, כאן {חנות}.\nלפי החישוב שלנו ל{חיה} נשאר {מה} {ימים}.\nלשים לך בצד {מוצר}?'+off,
+    rabbit: 'היי {שם}, כאן {חנות}.\nנשארו כופתיות ל{חיה} {ימים}.\nלהכין לך {מוצר}? אפשר להוסיף גם חציר טרי.'+off,
+    hens: 'היי {שם}, כאן {חנות}.\nלפי החישוב שלנו לתרנגולות נשארה תערובת {ימים}.\nלהכין לך שק {מוצר}? כשהאוכל לא נגמר, הן ממשיכות להטיל.'+off,
+    bird: 'היי {שם}, כאן {חנות}.\nלפי החישוב שלנו ל{חיה} נשארו זרעים {ימים}.\nלהכין לך {מוצר}?'+off
+  };
+}
+const RULE_IDEAS = [
+  {name:'רחצה ותספורת', pets:['dog'], every:60, template:'היי {שם}, כאן {חנות}.\nעברו חודשיים מהרחצה האחרונה של {חיה}. רוצה לקבוע תור?'},
+  {name:'החלפת חול מלאה בארגז', pets:['cat'], every:30, template:'היי {שם}, כאן {חנות}.\nזמן להחליף את כל החול בארגז של {חיה}. להכין לך שק?'},
+  {name:'בדיקת ציפורניים ומקור', pets:['bird'], every:60, template:'היי {שם}, כאן {חנות}.\nכדאי לבדוק את הציפורניים והמקור של {חיה}. רוצה לקפוץ?'},
+  {name:'טיפול נגד כינים בלול', pets:['hens'], every:60, template:'היי {שם}, כאן {חנות}.\nזמן לטיפול מונע נגד כינים בלול. להכין לך?'},
+  {name:'צעצועי לעיסה', pets:['rabbit'], every:45, template:'היי {שם}, כאן {חנות}.\nצעצועי הלעיסה של {חיה} כנראה נשחקו. להכין חדשים?'}
+];
+let petTab = 'dog';
+
 const prod = id => S.products.find(p => p.id===id) || S.products[0];
-const lastBuy = c => c.purchases.length ? c.purchases[c.purchases.length-1].date : c.consent.date;
+const lastBuy = c => c.purchases.length ? c.purchases[c.purchases.length-1].date : (c.consent?.date || today());
 const lastRem = c => c.reminders.length ? c.reminders[c.reminders.length-1].date : null;
+
 function cycle(c){
-  const p = prod(c.productId), base = baseDays(c, p);
-  const dates = c.purchases.map(x => x.date).sort(), gaps = [];
+  const p = prod(c.productId);
+  const base = Math.max(3, Math.round(c.daysOverride || p.days || p.kg*1000 / dailyGrams(c, p)));
+  const dates = c.purchases.map(x => x.date).sort();
+  const gaps = [];
   for (let i=1;i<dates.length;i++){ const g = diff(dates[i], dates[i-1]); if (g>=3) gaps.push(g); }
   const recent = gaps.slice(-3);
-  if (recent.length) return {days:Math.round(recent.reduce((a,b)=>a+b,0)/recent.length), base, learned:recent.length};
+  if (recent.length){
+    const avg = Math.round(recent.reduce((a,b)=>a+b,0)/recent.length);
+    return {days:avg, base, learned:recent.length};
+  }
   return {days:base, base, learned:0};
 }
 function status(c){
   const L = lastBuy(c), cy = cycle(c), due = addDays(L, cy.days), left = diff(due, today());
   const R = lastRem(c), remAfter = R && R > L;
   let st;
-  if (remAfter) st = (diff(today(), R) >= 6 && left < 0) ? 'followup' : 'sent';
-  else if (left < 0) st = 'overdue'; else if (left <= 5) st = 'due'; else if (left <= 10) st = 'soon'; else st = 'ok';
-  return {st, left, due, cy, frac:Math.max(0, Math.min(1, left / cy.days)), R};
+  if (c.pendingOrder) st = 'ordered';
+  else if (remAfter) st = (diff(today(), R) >= 6 && left < 0) ? 'followup' : 'sent';
+  else if (left < 0) st = 'overdue';
+  else if (left <= 5) st = 'due';
+  else if (left <= 10) st = 'soon';
+  else st = 'ok';
+  const frac = Math.max(0, Math.min(1, left / cy.days));
+  return {st, left, due, cy, frac, R};
 }
-const ST_LABEL = {overdue:'כנראה כבר נגמר', due:'נגמר בקרוב', followup:'לא חזר – לפנות שוב', sent:'נשלחה תזכורת', soon:'עוד כשבוע וחצי', ok:'מכוסה'};
+const ST_LABEL = {ordered:'ביקש שק', overdue:'כנראה כבר נגמר', due:'נגמר בקרוב', followup:'לא חזר – לפנות שוב', sent:'נשלחה תזכורת', soon:'עוד כשבוע וחצי', ok:'מכוסה'};
 const needsAction = s => s.st==='overdue' || s.st==='due' || s.st==='followup';
-const petPhrase = c => c.petName ? c.petName : PETS[c.pet].the;
+
+function petPhrase(c){ return c.petName ? c.petName : PETS[c.pet].the; }
 function daysPhrase(left){
   if (left <= 0) return 'רק לעוד ממש מעט, אם בכלל';
   if (left === 1) return 'בערך ליום אחד';
   if (left <= 2) return 'לעוד יום-יומיים';
   return 'לעוד כ-'+left+' ימים';
 }
-function buildMsg(c){
+function buildMsg(c, noLink){
   const s = status(c), p = prod(c.productId);
-  return S.store.template
-    .replaceAll('{שם}', c.name.split(' ')[0]).replaceAll('{חנות}', S.store.name)
-    .replaceAll('ל{חיה}', 'ל'+(c.petName || PETS[c.pet].the.slice(1))).replaceAll('{חיה}', petPhrase(c))
-    .replaceAll('{מה}', p.kind==='litter' ? 'חול' : 'אוכל').replaceAll('{ימים}', daysPhrase(s.left))
-    .replaceAll('{מוצר}', p.name+' '+p.kg+' ק"ג');
+  return ((S.store.templates||{})[c.pet] || S.store.template)
+    .replaceAll('{שם}', c.name.split(' ')[0])
+    .replaceAll('{חנות}', S.store.name)
+    .replaceAll('ל{חיה}', 'ל'+(c.petName || PETS[c.pet].the.slice(1)))
+    .replaceAll('{חיה}', petPhrase(c))
+    .replaceAll('{מה}', p.kind==='litter' ? 'חול' : 'אוכל')
+    .replaceAll('{ימים}', daysPhrase(s.left))
+    .replaceAll('{מוצר}', p.name+' '+p.kg+' ק"ג')
+    + (noLink ? '' : '\n\nלתשובה בלחיצה (כן / קניתי כבר / הסרה):\n' + replyUrl(c));
 }
+const normPhone = s => String(s||'').replace(/\D/g,'');
+const validPhone = s => /^05\d{8}$/.test(normPhone(s));
+const intl = s => { const n = normPhone(s); return n.startsWith('0') ? '972'+n.slice(1) : n; };
+const prettyPhone = s => { const n = normPhone(s); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3) : n; };
 const waLink = c => 'https://wa.me/'+intl(c.phone)+'?text='+encodeURIComponent(buildMsg(c));
+
+/* attribution: a purchase within 10 days after a reminder (sent after the previous purchase) counts as "brought back" */
 function returns(fromDays=30){
   const out = [], since = addDays(today(), -fromDays);
   for (const c of S.customers){
-    const buys = [...c.purchases].sort((a,b)=>a.date<b.date?-1:1);
+    const buys = c.purchases.map(x=>x).sort((a,b)=>a.date<b.date?-1:1);
     buys.forEach((b,i) => {
-      if (b.date < since) return;
+      if (b.date < since || b.src==='reported') return;
       const prev = i>0 ? buys[i-1].date : '0000';
       const r = c.reminders.find(r => r.date > prev && r.date <= b.date && diff(b.date, r.date) <= 10);
       if (r) out.push({c, b, r});
@@ -107,30 +705,908 @@ function returns(fromDays=30){
   }
   return out;
 }
-const joinUrl = () => new URL('join.html?s='+encodeURIComponent(S.store.slug), location.href).href;
 
-/* ---------- data ---------- */
-const mapCustomer = (r, P, R) => ({
-  id:r.id, name:r.name, phone:r.phone, pet:r.pet, petName:r.pet_name||'', size:Number(r.size), count:r.count, productId:r.product_id,
-  consent:{date:String(r.consent_at).slice(0,10), source:r.consent_source},
-  purchases:(P[r.id]||[]).map(p=>({id:p.id, date:p.date, productId:p.product_id, price:Number(p.price)})).sort((a,b)=>a.date<b.date?-1:1),
-  reminders:(R[r.id]||[]).map(x=>({id:x.id, date:x.date})).sort((a,b)=>a.date<b.date?-1:1)
-});
-async function loadAll(store){
-  const sid = store.id, since = addDays(today(), -400);
-  const [pr, cu, pu, re] = await Promise.all([
-    sb.from('products').select('*').eq('store_id', sid).order('created_at'),
-    sb.from('customers').select('*').eq('store_id', sid).eq('opted_out', false),
-    sb.from('purchases').select('id,customer_id,product_id,price,date').eq('store_id', sid).gte('date', since).limit(20000),
-    sb.from('reminders').select('id,customer_id,date').eq('store_id', sid).gte('date', since).limit(20000)
-  ]);
-  for (const r of [pr,cu,pu,re]) if (r.error) throw r.error;
-  const group = rows => rows.reduce((m,x)=>((m[x.customer_id] ||= []).push(x), m), {});
-  const P = group(pu.data), R = group(re.data);
-  S = {store, products: pr.data.map(p=>({...p, kg:Number(p.kg), price:Number(p.price)})), customers: cu.data.map(r=>mapCustomer(r,P,R))};
-  videoURL = videoPublicUrl(sb, store.video_path);
+/* ---------- store video: Supabase Storage ---------- */
+const MAX_VIDEO_MB = 60;
+let videoURL = null, hasOrig = false, trimBlob = null, trimURL = null, trimBusy = false, usingDefaultVideo = false;
+/* free stock clip (Pexels license: free to use, no attribution required) used until the store uploads its own */
+const DEFAULT_VIDEO = 'https://videos.pexels.com/video-files/6131732/6131732-hd_1280_720_25fps.mp4';
+const pubUrl = p => p ? sb.storage.from('store-videos').getPublicUrl(p).data.publicUrl : null;
+async function loadVideo(){
+  const u = pubUrl(S.store.video_path);
+  usingDefaultVideo = !u; videoURL = u || DEFAULT_VIDEO; hasOrig = !!S.store.video_orig_path;
+}
+const fmtSec = s => s >= 60 ? Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0') : Math.round(s)+' שניות';
+function trimProgress(label, p, extra=''){
+  const box = $('#trimBox'); if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `<div class="trim-step"><b>${label}</b><span class="num">${Math.round(p*100)}%</span></div>
+    <div class="trim-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p*100)}"><i style="width:${(p*100).toFixed(1)}%"></i></div>${extra}`;
+}
+async function runSmartTrim(){
+  if (trimBusy || !videoURL || usingDefaultVideo) return;
+  if (!SmartTrim.supported()){ $('#vidErr').textContent = 'הדפדפן הזה לא יודע ליצור סרטון. נסו בכרום במחשב.'; return; }
+  trimBusy = true; $('#vidErr').textContent = '';
+  let local = null;
+  try {
+    trimProgress('מוריד את הסרטון לעריכה', 0);
+    local = URL.createObjectURL(await (await fetch(videoURL)).blob());
+    const A = 'מנתח את הסרטון: חדות, תאורה ורעידות';
+    const a = await SmartTrim.analyze(local, {target:18, onProgress:p => trimProgress(A, p)});
+    if (a.duration <= 22){ $('#trimBox').innerHTML = `<p class="sub">הסרטון כבר קצר (${fmtSec(a.duration)}), אין מה לחתוך.</p>`; return; }
+    const tl = `<div class="trim-tl" dir="ltr" aria-hidden="true">${a.segments.map(s => `<i style="left:${(s.a/a.duration*100).toFixed(2)}%;width:${((s.b-s.a)/a.duration*100).toFixed(2)}%"></i>`).join('')}</div>
+      <p class="sub">נבחרו ${a.segments.length} קטעים, ${fmtSec(a.kept)} מתוך ${fmtSec(a.duration)}. הקטעים החשוכים, המטושטשים והרועדים ירדו.</p>`;
+    trimBlob = await SmartTrim.render(local, a.segments, {onProgress:p => trimProgress('יוצר את הסרטון הערוך', p, tl)});
+    if (trimURL) URL.revokeObjectURL(trimURL); trimURL = URL.createObjectURL(trimBlob);
+    $('#trimBox').innerHTML = `<div class="trim-step"><b>הגרסה הערוכה מוכנה</b></div>${tl}
+      <video class="vid-prev" id="trimPrev" aria-label="הגרסה הערוכה" controls muted loop playsinline></video>
+      <div class="row"><button class="btn primary" data-act="savetrim">להשתמש בגרסה הערוכה</button><button class="btn" data-act="canceltrim">להשאיר את המקור</button></div>`;
+    const pv = $('#trimPrev'); pv.muted = true; pv.src = trimURL; pv.play().catch(()=>{});
+  } catch(e){
+    console.error(e); $('#trimBox').hidden = true; $('#vidErr').textContent = 'העריכה נכשלה: '+(e.message||'שגיאה לא ידועה')+'. אפשר להמשיך עם הסרטון המקורי.';
+  } finally { trimBusy = false; if (local) setTimeout(() => URL.revokeObjectURL(local), 1000); }
+}
+async function uploadVideo(blob, keepOriginal){
+  const ext = /webm/.test(blob.type) ? 'webm' : /quicktime/.test(blob.type) ? 'mov' : 'mp4';
+  const path = S.store.id + '/' + Date.now() + '.' + ext;
+  const up = await sb.storage.from('store-videos').upload(path, blob, {contentType: blob.type || 'video/mp4', upsert:false});
+  if (up.error) throw up.error;
+  const old = S.store.video_path, oldOrig = S.store.video_orig_path;
+  const patch = keepOriginal ? {video_path:path, video_orig_path: oldOrig || old} : {video_path:path, video_orig_path:null};
+  const {error} = await sb.from('stores').update(patch).eq('id', S.store.id);
+  if (error) throw error;
+  const remove = keepOriginal ? (oldOrig ? [old] : []) : [old, oldOrig].filter(Boolean);
+  if (remove.length) sb.storage.from('store-videos').remove(remove).catch(()=>{});
+  Object.assign(S.store, patch); await loadVideo();
+}
+async function saveTrim(){
+  if (!trimBlob) return;
+  try { toast('שומר את הגרסה הערוכה…'); await uploadVideo(trimBlob, true); trimBlob = null; route(); toast('נשמר. המקור שמור למקרה שתרצו לחזור'); }
+  catch(e){ console.error(e); $('#vidErr').textContent = 'השמירה נכשלה: '+(e.message||''); }
+}
+async function revertOrig(){
+  const orig = S.store.video_orig_path, cur = S.store.video_path; if (!orig) return;
+  const {error} = await sb.from('stores').update({video_path:orig, video_orig_path:null}).eq('id', S.store.id);
+  if (error) return toast('לא הצלחתי לחזור למקור');
+  sb.storage.from('store-videos').remove([cur]).catch(()=>{});
+  S.store.video_path = orig; S.store.video_orig_path = null; await loadVideo(); route(); toast('חזרנו לסרטון המקורי');
+}
+async function deleteVideo(){
+  const paths = [S.store.video_path, S.store.video_orig_path].filter(Boolean);
+  const {error} = await sb.from('stores').update({video_path:null, video_orig_path:null}).eq('id', S.store.id);
+  if (error) return toast('לא הצלחתי להסיר');
+  if (paths.length) sb.storage.from('store-videos').remove(paths).catch(()=>{});
+  S.store.video_path = S.store.video_orig_path = null; await loadVideo(); route(); toast('הסרטון הוסר. מוצג סרטון לדוגמה');
+}
+function attachVideo(v){
+  if (!v || !videoURL) return;
+  v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+  v.onerror = () => { if (usingDefaultVideo){ const k = v.closest('.kiosk'); if (k){ k.classList.remove('has-video'); k.querySelector('.k-shade')?.remove(); } v.remove(); } };
+  v.src = videoURL; v.play().catch(()=>{});
+}
+async function saveVideoFile(file){
+  const err = $('#vidErr'); if (err) err.textContent = '';
+  if (!file) return;
+  if (!file.type.startsWith('video/')){ if (err) err.textContent = 'הקובץ הזה לא סרטון. בחרו קובץ MP4 או MOV.'; return; }
+  if (file.size > MAX_VIDEO_MB*1e6){ if (err) err.textContent = 'הסרטון גדול מדי ('+Math.round(file.size/1e6)+'MB). עד '+MAX_VIDEO_MB+'MB.'; return; }
+  try { toast('מעלה את הסרטון…'); await uploadVideo(file, false); route(); toast('הסרטון נשמר. אפשר להפעיל עליו עריכה חכמה'); }
+  catch(e){ console.error(e); if (err) err.textContent = 'ההעלאה נכשלה: '+(e.message||''); }
 }
 
+/* ---------- ui helpers ---------- */
+const $ = s => document.querySelector(s);
+function toast(t){
+  const el = document.createElement('div'); el.className='toast'; el.setAttribute('role','status'); el.textContent=t;
+  document.body.appendChild(el); setTimeout(()=>el.remove(), 3200);
+}
+function bagHTML(s){
+  const C = 2*Math.PI*24, off = C*(1-s.frac);
+  const col = (s.st==='overdue'||s.st==='followup') ? 'var(--danger)' : s.st==='due' ? 'var(--brass)' : s.st==='sent' ? 'var(--muted)' : 'var(--em-ring)';
+  return `<div class="ring" aria-hidden="true"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="24" class="trk"/><circle cx="29" cy="29" r="24" class="val" style="stroke:${col};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${off.toFixed(1)}"/></svg><b class="num">${Math.max(0,s.left)}</b><small>ימים</small></div>`;
+}
+function custRow(c, mode){
+  const s = status(c), p = prod(c.productId);
+  const leftTxt = s.left<0 ? 'נגמר לפני כ-'+(-s.left)+' ימים' : s.left===0 ? 'נגמר היום' : 'נשארו כ-'+s.left+' ימים';
+  let acts = '';
+  if (mode==='today'){
+    acts = `<a class="btn wa" href="${esc(waLink(c))}" target="_blank" rel="noopener" data-act="opened" data-id="${c.id}">פתח בוואטסאפ</a>
+            <button class="btn" data-act="sent" data-id="${c.id}">✓ שלחתי</button>`;
+  } else {
+    acts = `<button class="btn" data-act="buy" data-id="${c.id}">נמכר שוב</button>`;
+  }
+  return `<div class="cust">
+    ${bagHTML(s)}
+    <div class="who">
+      <div class="row" style="gap:8px"><strong>${esc(c.name)}</strong><span class="pill st-${s.st}">${ST_LABEL[s.st]}</span></div>
+      <div class="meta">${esc(petPhrase(c))} · ${esc(p.name)} ${p.kg} ק"ג · <span class="num">${leftTxt}</span>${s.st==='sent'||s.st==='followup' ? ' · תזכורת '+ago(s.R) : ''}</div>
+      <div class="row" style="gap:14px"><button class="link" data-act="open" data-id="${c.id}">פרטים וחישוב ←</button>${mode==='today'?`<a class="link" href="${esc(replyUrl(c))}" target="_blank" rel="noopener">הדגמה: מה הלקוח רואה ←</a>`:''}</div>
+    </div>
+    <div class="acts">${acts}</div>
+  </div>`;
+}
+
+/* ---------- extra reminders (per animal type) ---------- */
+const ruleById = id => S.rules.find(r => r.id===id);
+const EVERY = [[7,'כל שבוע'],[14,'כל שבועיים'],[21,'כל 3 שבועות'],[30,'כל חודש'],[42,'כל 6 שבועות'],[60,'כל חודשיים'],[90,'כל 3 חודשים'],[180,'כל חצי שנה'],[365,'כל שנה']];
+const everyText = n => (EVERY.find(x=>x[0]===Number(n))||[0,'כל '+n+' ימים'])[1];
+function xStatus(x){
+  const r = ruleById(x.ruleId); if (!r) return null;
+  const due = addDays(x.last, r.every), left = diff(due, today());
+  return {r, due, left, frac:Math.max(0, Math.min(1, left / r.every)), st: left < 0 ? 'overdue' : 'due'};
+}
+function dueExtras(){
+  const out = [];
+  for (const c of S.customers) for (const x of (c.extras||[])){
+    const s = xStatus(x); if (s && s.left <= 3) out.push({c, x, s});
+  }
+  return out.sort((a,b) => a.s.left - b.s.left);
+}
+function xMsg(c, x){
+  const r = ruleById(x.ruleId);
+  return r.template.replaceAll('{שם}', c.name.split(' ')[0]).replaceAll('{חנות}', S.store.name)
+    .replaceAll('ל{חיה}', 'ל'+(c.petName || PETS[c.pet].the.slice(1))).replaceAll('{חיה}', petPhrase(c));
+}
+const xWa = (c, x) => 'https://wa.me/'+intl(c.phone)+'?text='+encodeURIComponent(xMsg(c, x));
+function xRow({c, x, s}){
+  const when = s.left < 0 ? 'עבר לפני '+(-s.left)+' ימים' : s.left === 0 ? 'היום' : 'בעוד '+s.left+' ימים';
+  return `<div class="cust">${bagHTML(s)}
+    <div class="who">
+      <div class="row" style="gap:8px"><strong>${esc(c.name)}</strong><span class="pill rule-pill">${esc(s.r.name)}</span></div>
+      <div class="meta">${esc(petPhrase(c))} · ${everyText(s.r.every)} · <span class="num">${when}</span></div>
+      <div><button class="link" data-act="open" data-id="${c.id}">כרטיס לקוח ←</button></div>
+    </div>
+    <div class="acts"><a class="btn wa" href="${esc(xWa(c,x))}" target="_blank" rel="noopener">פתח בוואטסאפ</a><button class="btn" data-act="xsent" data-id="${c.id}" data-x="${x.id}">✓ שלחתי</button></div>
+  </div>`;
+}
+function rulesChecks(pet, mode){
+  const rs = S.rules.filter(r => r.pets.includes(pet));
+  if (!rs.length) return '';
+  return `<div class="field"><span class="lbl">${mode==='join'?'רוצה שנזכיר לך גם:':'להזכיר ללקוח גם:'}</span>
+    ${rs.map(r => `<label class="check"><input type="checkbox" data-rule="${r.id}" id="fr-${r.id}"><span>${esc(r.name)} <span class="hint">(${everyText(r.every)})</span></span></label>`).join('')}</div>`;
+}
+function ruleCard(r){
+  const used = S.customers.filter(c => (c.extras||[]).some(x => x.ruleId===r.id)).length;
+  const opts = EVERY.some(x=>x[0]===Number(r.every)) ? EVERY : [...EVERY, [Number(r.every), 'כל '+r.every+' ימים']];
+  return `<div class="rule" data-rid="${r.id}">
+    <div class="grid2">
+      <div class="field"><label for="rn-${r.id}">שם התזכורת</label><input id="rn-${r.id}" data-rf="name" value="${esc(r.name)}"></div>
+      <div class="field"><label for="re-${r.id}">כל כמה זמן</label><select id="re-${r.id}" data-rf="every">${opts.map(([n,t])=>`<option value="${n}" ${n===Number(r.every)?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><span class="lbl">לאילו חיות</span><div class="chips">${Object.entries(PETS).map(([k,v])=>`<input type="checkbox" id="rp-${r.id}-${k}" data-rpet="${k}" ${r.pets.includes(k)?'checked':''}><label for="rp-${r.id}-${k}">${v.label}</label>`).join('')}</div></div>
+    <div class="field"><label for="rt-${r.id}">ההודעה שתישלח</label><textarea id="rt-${r.id}" data-rf="template">${esc(r.template)}</textarea><span class="hint">אפשר להשתמש ב: {שם} {חיה} {חנות}</span></div>
+    <div class="row"><span class="sub">${used} לקוחות רשומים לתזכורת הזאת</span><span class="spacer"></span><button class="btn danger sm" type="button" data-act="delrule" data-id="${r.id}">מחיקה</button></div>
+  </div>`;
+}
+function syncRules(){
+  document.querySelectorAll('.rule[data-rid]').forEach(el => {
+    const r = ruleById(el.dataset.rid); if (!r) return;
+    r.name = el.querySelector('[data-rf=name]').value.trim() || r.name;
+    r.every = Number(el.querySelector('[data-rf=every]').value) || r.every;
+    r.template = el.querySelector('[data-rf=template]').value;
+    r.pets = [...el.querySelectorAll('[data-rpet]:checked')].map(i => i.dataset.rpet);
+  });
+}
+function extrasDrawerHTML(c){
+  const xs = (c.extras||[]).map(x => ({x, s:xStatus(x)})).filter(o => o.s);
+  const avail = S.rules.filter(r => r.pets.includes(c.pet) && !(c.extras||[]).some(x => x.ruleId===r.id));
+  return `<div><span class="lbl">תזכורות נוספות</span>
+    <ul class="hist" style="margin-top:6px">${xs.map(({x,s}) => `<li><span>${esc(s.r.name)} · ${everyText(s.r.every)} · הבאה ב-${fmtD(s.due)}</span><button class="btn danger sm" data-act="xdel" data-id="${c.id}" data-x="${x.id}">הסרה</button></li>`).join('') || '<li>אין עדיין</li>'}</ul>
+    ${avail.length ? `<div class="xadd">
+      <div class="field"><label for="xRule">תזכורת</label><select id="xRule">${avail.map(r=>`<option value="${r.id}">${esc(r.name)} (${everyText(r.every)})</option>`).join('')}</select></div>
+      <div class="field"><label for="xLast">מתי בוצע לאחרונה</label><input type="date" id="xLast" value="${today()}" max="${today()}"></div>
+      <button class="btn" data-act="xadd" data-id="${c.id}">+ הוספה</button></div>`
+    : `<p class="hint" style="margin:6px 0 0">${S.rules.some(r=>r.pets.includes(c.pet)) ? 'כל התזכורות ל'+PETS[c.pet].label+' כבר נוספו.' : 'אין עדיין תזכורות ל'+PETS[c.pet].label+'. אפשר להוסיף בהגדרות החנות.'}</p>`}
+  </div>`;
+}
+
+
+/* ---------- POS / barcode: the sale arrives by itself ---------- */
+function logPos(t){
+  S.posLog = S.posLog || [];
+  const d = new Date();
+  S.posLog.unshift({t, time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')});
+  S.posLog = S.posLog.slice(0, 20);
+}
+function modal(html){
+  $('#overlayRoot').innerHTML = `<div class="overlay center" data-act="close"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">${html}</div></div>`;
+}
+function handleScan(code){
+  const p = S.products.find(x => x.barcode && x.barcode===code);
+  if (p) return openSaleModal(p, {source:'scan'});
+  modal(`<span class="eyebrow">ברקוד חדש</span><h2 id="mTitle">לאיזה מוצר שייך הברקוד?</h2>
+    <p class="sub num" dir="ltr" style="text-align:right">${esc(code)}</p>
+    <div class="field"><label for="mLearn">המוצר</label><select id="mLearn">${S.products.map(x=>`<option value="${x.id}">${esc(x.name)} ${x.kg} ק"ג</option>`).join('')}</select></div>
+    <p class="hint" style="margin:0">שואלים רק פעם אחת. מהסריקה הבאה המערכת תזהה את המוצר לבד.</p>
+    <div class="row"><button class="btn primary" data-act="learnbc" data-code="${esc(code)}">שמירה והמשך</button><button class="btn" data-act="close">זה לא מזון או חול</button></div>`);
+  $('#mLearn').focus();
+}
+function openSaleModal(p, {source='scan', phone=''} = {}){
+  modal(`<span class="eyebrow">${source==='pos' ? 'התקבל מהקופה, בלי טלפון של לקוח' : 'זוהה בסריקה'}</span>
+    <h2 id="mTitle">נמכר: ${esc(p.name)} ${p.kg} ק"ג</h2>
+    <div class="field"><label for="mPhone">מי הלקוח? טלפון</label><input id="mPhone" class="search num" inputmode="tel" autocomplete="off" placeholder="05X-XXXXXXX" value="${esc(phone)}"></div>
+    <div id="mHits" class="list" style="margin-top:0"></div>
+    <div class="row"><button class="btn primary" data-act="mqr" data-pid="${p.id}">לקוח חדש: הצג QR להרשמה</button><button class="btn" data-act="close">דלג</button></div>`);
+  const i = $('#mPhone'), draw = () => mHits(p, i.value);
+  i.addEventListener('input', draw); draw(); i.focus();
+}
+function mHits(p, q){
+  const nq = normPhone(q), box = $('#mHits'); if (!box) return;
+  let list, title;
+  if (nq.length >= 3){ list = S.customers.filter(c => normPhone(c.phone).includes(nq)).slice(0,4); title = list.length ? '' : 'לא נמצא לקוח עם המספר הזה.'; }
+  else {
+    list = S.customers.filter(c => kindsFor(c.pet).includes(p.kind)).map(c => ({c, s:status(c)}))
+      .sort((a,b) => (a.c.productId===p.id?0:1)-(b.c.productId===p.id?0:1) || Math.abs(a.s.left)-Math.abs(b.s.left)).slice(0,3).map(o=>o.c);
+    title = list.length ? 'אולי אחד מהלקוחות שהשק שלהם נגמר עכשיו:' : '';
+  }
+  box.innerHTML = (title ? `<p class="sub" style="margin:0">${title}</p>` : '') + list.map(c => {
+    const s = status(c);
+    return `<button class="pick" data-act="massign" data-id="${c.id}" data-pid="${p.id}"><b>${esc(c.name)}</b><span class="num">${prettyPhone(c.phone)} · ${esc(petPhrase(c))} · ${s.left<=0?'השק כבר נגמר':'נשארו '+s.left+' ימים'}</span></button>`;
+  }).join('') + (validPhone(q) && !list.length ? `<button class="btn" data-act="newcust" data-phone="${esc(normPhone(q))}" data-pid="${p.id}">+ לקוח חדש עם המספר ${prettyPhone(q)}</button>` : '');
+}
+function showSaleQR(pid){
+  const p = prod(pid), url = joinUrl(pid);
+  modal(`<span class="eyebrow">הלקוח סורק בטלפון</span><h2 id="mTitle">QR למכירה הזאת</h2>
+    <p class="sub">המוצר כבר ממולא: ${esc(p.name)} ${p.kg} ק"ג. הלקוח רק מקיש שם וטלפון ומאשר.</p>
+    <div class="qrwrap"><div class="qrbox" id="mQR" role="img" aria-label="קוד QR להרשמה"></div></div>
+    <div class="row"><a class="btn" href="${esc(joinUrl(pid, true))}">הדגמה: מה הלקוח רואה</a><button class="btn" data-act="newcust" data-pid="${pid}">ללקוח אין סמארטפון: רישום ע״י המוכר</button><button class="btn" data-act="close">סגירה</button></div>`);
+  try { if (window.QRCode) new QRCode($('#mQR'), {text:url, width:240, height:240, colorDark:'#0c3a33', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M}); else $('#mQR').textContent = 'QR'; } catch(e){ $('#mQR').textContent = 'QR'; }
+}
+function posDemo(){
+  const ps = S.products.filter(p => p.barcode);
+  const withCust = ps.filter(p => S.customers.some(c => c.productId===p.id));
+  if (Math.random() < 0.65 && withCust.length){
+    const p = withCust[Math.floor(Math.random()*withCust.length)];
+    const cs = S.customers.filter(c => c.productId===p.id);
+    const c = cs[Math.floor(Math.random()*cs.length)];
+    recordBuy(c.id, p.id, 'pos'); route();
+  } else {
+    const p = ps[Math.floor(Math.random()*ps.length)] || S.products[0];
+    logPos('מהקופה: '+p.name+' '+p.kg+' ק"ג, בלי טלפון'); save();
+    openSaleModal(p, {source:'pos'});
+  }
+}
+/* a barcode scanner types digits very fast and ends with Enter; people type slower */
+let scanBuf = '', scanT = 0, scanEl = null, scanStart = null;
+document.addEventListener('keydown', e => {
+  const now = performance.now();
+  if (e.key && e.key.length===1 && /\d/.test(e.key)){
+    if (now - scanT > 60){ scanBuf = ''; scanEl = document.activeElement; scanStart = scanEl && 'value' in scanEl ? scanEl.value : null; }
+    scanBuf += e.key; scanT = now; return;
+  }
+  if (e.key==='Enter' && scanBuf.length >= 8 && now - scanT < 100){
+    e.preventDefault(); e.stopPropagation();
+    if (scanEl && scanStart !== null && typeof scanEl.value==='string' && scanEl.value.endsWith(scanBuf)){ scanEl.value = scanStart; scanEl.dispatchEvent(new Event('input', {bubbles:true})); }
+    const code = scanBuf; scanBuf = ''; handleScan(code); return;
+  }
+  if (e.key !== 'Shift') scanBuf = '';
+}, true);
+
+function handleExtraAct(a, t){
+  const id = t.dataset.id, c = id ? S.customers.find(x=>x.id===id) : null;
+  if (a==='xsent'){ const x = c.extras.find(x=>x.id===t.dataset.x); x.last = today(); (x.sent ||= []).push(today()); save(); route(); toast('נשלח. התזכורת הבאה '+everyText(ruleById(x.ruleId).every).replace('כל ','בעוד ')); return true; }
+  if (a==='xadd'){ const rid = $('#xRule').value, last = $('#xLast').value || today(); (c.extras ||= []).push({id:uid(), ruleId:rid, last: last > today() ? today() : last}); save(); openCustomer(c.id); toast('התזכורת נוספה'); return true; }
+  if (a==='xdel'){ c.extras = c.extras.filter(x=>x.id!==t.dataset.x); save(); openCustomer(c.id); return true; }
+  if (a==='addrule'){
+    syncRules();
+    const idea = t.dataset.idea != null ? RULE_IDEAS[Number(t.dataset.idea)] : {name:'תזכורת חדשה', pets:['dog'], every:30, template:'היי {שם}, כאן {חנות}.\n'};
+    S.rules.push({id:'r'+uid(), ...JSON.parse(JSON.stringify(idea)), template: idea.template + (idea.template.includes('הסר') ? '' : '\n(להפסקת תזכורות השב/י "הסר")')});
+    save(); route(); setTimeout(() => { const cards = document.querySelectorAll('.rule'); const last = cards[cards.length-1]; last?.scrollIntoView({block:'center'}); last?.querySelector('input')?.focus(); }, 50);
+    return true;
+  }
+  if (a==='saverules'){ syncRules(); save(); toast('התזכורות נשמרו'); route(); return true; }
+  if (a==='delrule'){
+    syncRules(); const n = S.customers.filter(c => (c.extras||[]).some(x=>x.ruleId===id)).length;
+    S.rules = S.rules.filter(r=>r.id!==id); S.customers.forEach(c => c.extras = (c.extras||[]).filter(x=>x.ruleId!==id));
+    save(); route(); toast(n ? 'התזכורת נמחקה והוסרה מ-'+n+' לקוחות' : 'התזכורת נמחקה'); return true;
+  }
+  if (a==='posdemo'){ posDemo(); return true; }
+  if (a==='learnbc'){
+    const p = prod($('#mLearn').value); S.products.forEach(x => { if (x.barcode===t.dataset.code) x.barcode=''; });
+    p.barcode = t.dataset.code; save(); toast('נשמר. מעכשיו הברקוד הזה מזוהה כ'+p.name); openSaleModal(p, {source:'scan'}); return true;
+  }
+  if (a==='massign'){ closeDrawer(); recordBuy(id, t.dataset.pid, 'scan'); route(); return true; }
+  if (a==='mqr'){ showSaleQR(t.dataset.pid); return true; }
+  return false;
+}
+
+/* ---------- customer replies: "yes please" / "already bought" / "remove me" ---------- */
+const replyUrl = c => appBase() + 'reply.html?t=' + c.replyToken;
+function logReply(c, t){
+  S.replyLog = S.replyLog || [];
+  S.replyLog.unshift({date:today(), name:c.name, t});
+  S.replyLog = S.replyLog.slice(0, 30);
+}
+function renderReply(cid){
+  const full = $('#full');
+  const c = S.customers.find(x => x.id===cid);
+  if (!c){ full.innerHTML = `<div class="join"><div class="panel" style="text-align:center"><h2>הקישור כבר לא פעיל</h2><p class="sub">אם ביקשת להסיר את עצמך, ההסרה נקלטה.</p></div></div>`; return; }
+  const p = prod(c.productId);
+  full.innerHTML = `<div class="join">
+    <a class="back-link" href="#today">→ חזרה למערכת (רק בהדגמה)</a>
+    <div class="join-head"><span class="eyebrow" style="color:#e2c27f">הודעה מ${esc(S.store.name)}</span><h1>היי ${esc(c.name.split(' ')[0])}</h1></div>
+    <div class="msg">${esc(buildMsg(c, true))}</div>
+    <div class="panel" id="replyBody">
+      <div class="reply-btns">
+        <button class="btn primary big" data-act="r-yes" data-id="${c.id}">כן, אשמח ל${esc(p.kind==='litter'?'חול':'שק')}</button>
+        <button class="btn big" data-act="r-bought" data-id="${c.id}">קניתי כבר</button>
+        <button class="btn big ghost danger" data-act="r-remove" data-id="${c.id}">הסירו אותי מהתזכורות</button>
+      </div>
+      <p class="hint" style="margin:12px 0 0">אחרי חיבור לוואטסאפ העסקי, אותם כפתורים יופיעו ישר בתוך ההודעה בוואטסאפ.</p>
+    </div></div>`;
+}
+function replyDone(html){ $('#replyBody').innerHTML = `<div style="display:grid;gap:10px;text-align:center">${html}</div>`; }
+function handleReplyAct(a, t){
+  const c = S.customers.find(x => x.id===t.dataset.id);
+  if (!c || !a.startsWith('r-')) return false;
+  const p = prod(c.productId);
+  if (a==='r-yes'){
+    c.pendingOrder = {date:today(), productId:p.id};
+    if (lastRem(c) !== today()) c.reminders.push({date:today()});
+    logReply(c, 'ביקש '+p.name); save();
+    replyDone(`<h2>מעולה!</h2><p class="sub">${esc(S.store.name)} קיבלו את הבקשה ל${esc(p.name)} ${p.kg} ק"ג, ויחזרו אליך לתיאום איסוף או משלוח.</p>`);
+    return true;
+  }
+  if (a==='r-bought'){
+    replyDone(`<h2>תודה! מתי קנית?</h2><p class="sub">ככה נדע מתי להזכיר לך בפעם הבאה.</p>
+      <div class="reply-btns">${[[0,'היום'],[3,'לפני כמה ימים'],[7,'לפני שבוע'],[14,'לפני שבועיים'],[30,'לפני חודש או יותר']].map(([d,l]) => `<button class="btn" data-act="r-when" data-id="${c.id}" data-d="${d}">${l}</button>`).join('')}</div>`);
+    return true;
+  }
+  if (a==='r-when'){
+    const d = Number(t.dataset.d), date = addDays(today(), -d);
+    c.purchases.push({date, productId:p.id, price:0, src:'reported'});
+    c.purchases.sort((x,y) => x.date<y.date?-1:1);
+    delete c.pendingOrder;
+    logReply(c, 'דיווח שכבר קנה ('+(d===0?'היום':'לפני '+d+' ימים')+')'); save();
+    const s = status(c);
+    replyDone(`<h2>עודכן</h2><p class="sub">נזכיר לך שוב בערך ב${fmtLong(addDays(s.due,-4))}.</p>`);
+    return true;
+  }
+  if (a==='r-remove'){
+    replyDone(`<h2>להסיר אותך מהתזכורות?</h2><div class="reply-btns"><button class="btn danger" data-act="r-remove-ok" data-id="${c.id}">כן, להסיר</button><button class="btn" data-act="r-cancel" data-id="${c.id}">לא, להשאיר</button></div>`);
+    return true;
+  }
+  if (a==='r-cancel'){ renderReply(c.id); return true; }
+  if (a==='r-remove-ok'){
+    logReply(c, 'ביקש להסיר את עצמו');
+    S.removed = S.removed || []; S.removed.push({...c, removedAt:today()});
+    S.customers = S.customers.filter(x => x.id!==c.id); save();
+    replyDone(`<h2>הוסרת</h2><p class="sub">לא נשלח לך יותר תזכורות. רוצה לחזור? ספרו לנו בחנות.</p>`);
+    return true;
+  }
+  return false;
+}
+function ordersHTML(){
+  const os = S.customers.filter(c => c.pendingOrder);
+  const log = (S.replyLog||[]).filter(r => diff(today(), r.date) <= 7).slice(0, 6);
+  if (!os.length && !log.length) return '';
+  return `<section class="panel">
+    <div class="row"><h2>הלקוחות ענו</h2></div>
+    <p class="sub">תשובות שהגיעו מהכפתורים בהודעה. הזמנות מחכות כאן עד שמסמנים שנמכרו.</p>
+    <div class="list">${os.map(c => { const p = prod(c.pendingOrder.productId); return `<div class="cust" style="grid-template-columns:1fr auto">
+      <div class="who"><div class="row" style="gap:8px"><strong>${esc(c.name)}</strong><span class="pill st-ordered">ביקש שק</span></div>
+        <div class="meta">${esc(p.name)} ${p.kg} ק"ג · ${ago(c.pendingOrder.date)} · <span class="num">${prettyPhone(c.phone)}</span></div></div>
+      <div class="acts"><a class="btn wa" href="https://wa.me/${intl(c.phone)}" target="_blank" rel="noopener">וואטסאפ</a><button class="btn primary" data-act="o-sold" data-id="${c.id}">✓ נמכר</button><button class="btn sm ghost" data-act="o-cancel" data-id="${c.id}">ביטול</button></div></div>`; }).join('')}</div>
+    ${log.length ? `<ul class="hist" style="margin-top:12px">${log.map(r => `<li><span>${esc(r.name)}: ${esc(r.t)}</span><b class="num">${fmtD(r.date)}</b></li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
+/* ---------- per-animal settings ---------- */
+function syncPetPane(){
+  const ta = $('#petTpl'); if (ta) S.store.templates[ta.dataset.pet] = ta.value;
+  syncRules();
+}
+function petPanelHTML(){
+  const k = petTab, L = PETS[k].label, rs = S.rules.filter(r => r.pets.includes(k));
+  const ideas = RULE_IDEAS.map((r,i)=>({r,i})).filter(o => o.r.pets.includes(k) && !S.rules.some(x=>x.name===o.r.name));
+  return `<section class="panel" id="petPanel">
+    <h2>תזכורות לפי סוג חיה</h2>
+    <p class="sub">לכל חיה יש הודעת אוכל משלה, ותזכורות נוספות כמו חיסונים, טיפולים וציוד.</p>
+    <div class="pet-tabs" role="tablist" aria-label="סוג חיה">${Object.entries(PETS).map(([p,v]) => `<button type="button" role="tab" class="pet-tab" aria-selected="${p===k}" data-act="pettab" data-pet="${p}">${v.label} <span class="num">${S.customers.filter(c=>c.pet===p).length}</span></button>`).join('')}</div>
+    <div class="pet-pane">
+      <div class="field"><label for="petTpl">הודעת האוכל ל${L}</label><textarea id="petTpl" data-pet="${k}">${esc(S.store.templates[k] || S.store.template)}</textarea>
+        <span class="hint">אפשר להשתמש ב: {שם} {חנות} {חיה} {מה} {ימים} {מוצר}. לפי חוק הספאם, הודעה שיווקית צריכה לכלול דרך להסרה.</span></div>
+      <h3 class="pet-h">תזכורות נוספות ל${L} (${rs.length})</h3>
+      <div class="rules" style="margin-top:0">${rs.map(ruleCard).join('') || '<div class="empty">עוד אין תזכורות נוספות ל'+L+'</div>'}</div>
+      ${ideas.length ? `<div class="sugs"><span class="hint">רעיונות:</span>${ideas.map(o=>`<button class="btn sm" type="button" data-act="addrule" data-idea="${o.i}">+ ${esc(o.r.name)}</button>`).join('')}</div>` : ''}
+      <div class="row"><button class="btn" type="button" data-act="addrule" data-pet="${k}">+ תזכורת חדשה ל${L}</button><button class="btn primary" type="button" data-act="saverules">שמירה</button></div>
+    </div>
+  </section>`;
+}
+
+/* ---------- views ---------- */
+const views = {};
+
+views.today = () => {
+  const all = S.customers.map(c => ({c, s:status(c)}));
+  const act = all.filter(x => needsAction(x.s)).sort((a,b)=>a.s.left-b.s.left);
+  const waiting = all.filter(x => x.s.st==='sent');
+  const ret = returns(30);
+  const rev = ret.reduce((a,x)=>a+x.b.price,0);
+  const todays = S.customers.reduce((a,c)=>a+c.purchases.filter(p=>p.date===today()).length,0);
+  const xs = dueExtras(), total = act.length + xs.length;
+  return `
+  <div class="hello">
+    <span class="eyebrow">${fmtLong(today())}</span>
+    <h2>${new Date().getHours()<12?'בוקר טוב':new Date().getHours()<18?'צהריים טובים':'ערב טוב'}. ${total ? total+' תזכורות מחכות לך היום.' : 'כל הלקוחות מכוסים.'}</h2>
+    <p class="sub">אלה הלקוחות שהאוכל שלהם נגמר בימים הקרובים. הודעה אחת עכשיו, והם קונים אצלך ולא באינטרנט.</p>
+  </div>
+  <div class="kpis">
+    <div class="kpi hero"><span>לפנות היום</span><b class="num">${total}</b></div>
+    <div class="kpi"><span>מחכים לתשובה</span><b class="num">${waiting.length}</b></div>
+    <div class="kpi"><span>חזרו אחרי תזכורת · 30 יום</span><b class="num">${ret.length}</b></div>
+    <div class="kpi gold"><span>הכנסה שהמערכת החזירה</span><b class="num">${money(rev)}</b></div>
+  </div>
+  ${ordersHTML()}
+  <section class="panel">
+    <div class="row"><h2>למי לפנות היום</h2><span class="spacer"></span><a class="btn" href="#sale">+ רישום מכירה</a></div>
+    <p class="sub">"פתח בוואטסאפ" פותח הודעה מוכנה לשליחה מהוואטסאפ של החנות. אחרי ששלחת, לחץ "שלחתי".</p>
+    <div class="list">${act.length ? act.map(x=>custRow(x.c,'today')).join('') : '<div class="empty">אין למי לפנות היום. כל השקים מלאים.</div>'}</div>
+    ${waiting.length ? `<details class="more"><summary>מחכים לתשובה (${waiting.length})</summary><div class="list">${waiting.map(x=>custRow(x.c,'list')).join('')}</div></details>`:''}
+  </section>
+  <section class="panel">
+    <div class="row"><h2>תזכורות נוספות</h2><span class="spacer"></span><a class="btn" href="#setup">ניהול סוגי תזכורות</a></div>
+    <p class="sub">חיסונים, טיפולים וציוד, לפי סוג החיה. כל אחת עם ההודעה שלה.</p>
+    <div class="list">${xs.length ? xs.map(xRow).join('') : '<div class="empty">אין תזכורות נוספות להיום.</div>'}</div>
+  </section>
+  <section class="panel">
+    <h2>בדיקת סוף יום</h2>
+    ${eodHTML(todays)}
+  </section>`;
+};
+
+function eodHTML(todays){
+  let total=0; for (let i=1;i<=14;i++){ const d=addDays(today(),-i); total += S.customers.reduce((a,c)=>a+c.purchases.filter(p=>p.date===d).length,0); }
+  const avg = total/14;
+  const low = todays < Math.max(1, avg*0.6);
+  return `<p class="sub">היום נרשמו <b class="num">${todays}</b> מכירות של מזון וחול. בממוצע נרשמות <b class="num">${avg.toFixed(1)}</b> ביום.</p>
+  ${low ? `<p style="margin:.5em 0 0;color:var(--warn);font-weight:700">נראה שנרשמו פחות מכירות מהרגיל. אולי מכירות מהיום לא נרשמו?</p>` : `<p style="margin:.5em 0 0;color:var(--ok);font-weight:700">נראה תקין.</p>`}`;
+}
+
+views.customers = () => {
+  const rows = S.customers.map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
+  return `<section class="panel">
+    <div class="row"><h2>כל הלקוחות</h2><span class="sub">(${S.customers.length})</span><span class="spacer"></span><a class="btn primary" href="#sale">+ לקוח חדש / מכירה</a></div>
+    <div class="field" style="margin-top:12px"><label for="custFilter">חיפוש</label><input id="custFilter" placeholder="שם, טלפון או שם החיה"></div>
+    <div class="list" id="custList">${rows.map(x=>custRow(x.c,'list')).join('')}</div>
+  </section>`;
+};
+
+let salePid = null;
+views.sale = () => `<section class="panel">
+    <h2>רישום מכירה</h2>
+    <p class="sub">שני צעדים: מה נמכר, ומי הלקוח. יש סורק? סורקים את השק, והמוצר נבחר לבד.</p>
+    <div class="field" style="margin-top:14px"><span class="lbl">1. מה נמכר?</span>
+      <div class="prod-picks">${S.products.map(p => `<button type="button" class="pick-prod" data-act="pickprod" data-pid="${p.id}" aria-pressed="${salePid===p.id}"><b>${esc(p.name)}</b><span class="num">${p.kg} ק"ג · ${money(p.price)}</span></button>`).join('')}</div></div>
+    <div class="field"><label for="saleSearch">2. הטלפון של הלקוח (או השם)</label>
+      <input id="saleSearch" class="search num" inputmode="tel" autocomplete="off" placeholder="05X-XXXXXXX"></div>
+    <div id="saleResults" class="list"></div>
+  </section>`;
+
+function saleResults(q){
+  const nq = normPhone(q), t = q.trim();
+  const box = $('#saleResults'); if (!box) return;
+  if (!t){ box.innerHTML = `<div class="empty">${salePid ? 'עכשיו הקלידו את הטלפון של הלקוח' : 'בחרו מה נמכר, והקלידו את הטלפון של הלקוח'}</div>`; return; }
+  const hits = S.customers.filter(c => (nq.length>=3 && normPhone(c.phone).includes(nq)) || (!nq && (c.name.includes(t) || (c.petName||'').includes(t))));
+  let html = hits.slice(0,5).map(c => {
+    const p = prod(salePid || c.productId), s = status(c);
+    return `<div class="panel" style="padding:14px">
+      <div class="row"><strong style="font-size:1.15rem">${esc(c.name)}</strong><span class="sub num">${prettyPhone(c.phone)}</span><span class="pill st-${s.st}">${ST_LABEL[s.st]}</span></div>
+      <p class="sub">${esc(petPhrase(c))} · קנה לאחרונה ${ago(lastBuy(c))}</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary big" data-act="buy" data-id="${c.id}">נמכר: ${esc(p.name)} ${p.kg} ק"ג (${money(p.price)})</button>
+        <select class="btn" data-id="${c.id}" data-act="altprod" aria-label="מוצר אחר">${S.products.map(x => `<option value="${x.id}" ${x.id===p.id?'selected':''}>${esc(x.name)} ${x.kg} ק"ג</option>`).join('')}</select>
+      </div></div>`;
+  }).join('');
+  if (!hits.length) html = `<div class="empty">לקוח לא נמצא.</div>`;
+  html += `<button class="btn big" data-act="newcust" data-pid="${salePid||''}" data-phone="${esc(validPhone(q)?q:'')}">+ לקוח חדש${validPhone(q)?' עם המספר '+prettyPhone(q):''}</button>`;
+  box.innerHTML = html;
+}
+function optionsFor(pet, sel){
+  return S.products.filter(p => kindsFor(pet).includes(p.kind))
+    .map(p => `<option value="${p.id}" ${p.id===sel?'selected':''}>${esc(p.name)} ${p.kg} ק"ג</option>`).join('');
+}
+
+views.report = () => {
+  const ret = returns(30), rev = ret.reduce((a,x)=>a+x.b.price,0);
+  const since = addDays(today(), -30);
+  const sent = S.customers.reduce((a,c)=>a+c.reminders.filter(r=>r.date>=since).length,0);
+  const rate = sent ? Math.round(ret.length/sent*100) : 0;
+  const qr = S.customers.filter(c=>c.consent?.source==='qr').length;
+  const fee = 149, mult = rev/fee;
+  return `<div class="hello"><span class="eyebrow">${fmtD(since)} – ${fmtD(today())}</span><h2>דוח 30 הימים האחרונים</h2></div>
+  <div class="roi">
+    <div><h2>המערכת החזירה לך ${money(rev)} במכירות</h2><p>המנוי עולה ${money(fee)} בחודש. נספרת כל קנייה שהגיעה עד 10 ימים אחרי תזכורת.</p></div>
+    <div class="mult num" dir="ltr">×${mult.toFixed(1)}</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><span>לקוחות שחזרו אחרי תזכורת</span><b class="num">${ret.length}</b></div>
+    <div class="kpi"><span>תזכורות שנשלחו</span><b class="num">${sent}</b></div>
+    <div class="kpi gold"><span>מהתזכורות הביאו קנייה</span><b class="num">${rate}%</b></div>
+    <div class="kpi"><span>נרשמו לבד דרך ה-QR</span><b class="num">${qr}</b></div>
+  </div>
+  <section class="panel">
+    <h2>מי חזר בזכות תזכורת</h2>
+    <div class="list">${ret.length ? ret.sort((a,b)=>a.b.date<b.b.date?1:-1).map(x=>`
+      <div class="cust" style="grid-template-columns:1fr auto">
+        <div class="who"><strong>${esc(x.c.name)}</strong><div class="meta">תזכורת ב-${fmtD(x.r.date)} ← קנה ב-${fmtD(x.b.date)} (${diff(x.b.date,x.r.date)===0?'באותו יום':'אחרי '+diff(x.b.date,x.r.date)+' ימים'})</div></div>
+        <b class="num">${money(x.b.price)}</b></div>`).join('') : '<div class="empty">עוד אין קניות שחזרו אחרי תזכורת.</div>'}</div>
+  </section>`;
+};
+
+views.setup = () => `<section class="panel"><h2>קישור ההרשמה של החנות</h2>
+    <p class="sub">זה הקישור שה-QR פותח. אפשר גם לשים אותו באתר, באינסטגרם או בסטטוס.</p>
+    <div class="linkbox" style="margin-top:12px"><code>${esc(joinUrl())}</code><button class="btn" type="button" data-act="copylink">העתקה</button></div></section>
+  <section class="panel">
+    <h2>פרטי החנות</h2>
+    <form class="form" id="storeForm" style="margin-top:12px">
+      <div class="grid2">
+        <div class="field"><label for="sName">שם החנות</label><input id="sName" value="${esc(S.store.name)}" required></div>
+        <div class="field"><label for="sWa">מספר הוואטסאפ של החנות</label><input id="sWa" class="num" inputmode="tel" value="${esc(S.store.whatsapp)}"><span class="hint">ממנו יוצאות התזכורות ואליו הלקוחות עונים.</span></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="sPin">קוד יציאה מהעמדה (4 ספרות)</label><input id="sPin" class="num" inputmode="numeric" maxlength="4" value="${esc(S.store.pin||'1234')}"><span class="hint">מגן על מסך הניהול כשהטאבלט פונה ללקוחות.</span></div>
+        <label class="check" style="align-self:end"><input type="checkbox" id="sAuto" ${S.store.autoKiosk!==false?'checked':''}><span>חזרה אוטומטית לעמדת ה-QR אחרי 20 שניות בלי פעילות</span></label>
+      </div>
+      <div class="row"><button class="btn primary" type="submit">שמירה</button><span class="err" id="storeErr" role="alert"></span></div>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>חיבור לקופה</h2>
+    <p class="sub">כל מכירה של מזון שעוברת בקופה נכנסת לבד, והמערכת שואלת רק מי הלקוח.</p>
+    <div class="pos-grid">
+      <div class="pos-opt on"><b><i class="dot"></i>סורק ברקוד: פעיל</b>
+        <span>סורקים את השק בכל מסך, והמערכת מזהה את המוצר. ברקוד חדש? היא שואלת פעם אחת לאיזה מוצר הוא שייך, ומאז מזהה לבד.</span>
+        <div class="field"><label for="bcTest">בדיקה בלי סורק: הקלידו ברקוד ולחצו Enter</label><input id="bcTest" class="num" dir="ltr" inputmode="numeric" placeholder="7290011000015"></div></div>
+      <div class="pos-opt"><b>חיבור לקופה או לתוכנת הקבלות</b>
+        <span>מכירה עם טלפון של לקוח נרשמת אוטומטית, בלי ללחוץ כלום. בלי טלפון, המערכת קופצת ושואלת מי הלקוח. החיבור מוגדר מול הקופה של כל חנות.</span>
+        <button class="btn" type="button" data-act="posdemo">הדגמה: מכירה שמגיעה מהקופה</button></div>
+    </div>
+    ${(S.posLog||[]).length ? `<ul class="hist" style="margin-top:14px">${S.posLog.slice(0,6).map(l=>`<li><span>${esc(l.t)}</span><b class="num">${esc(l.time)}</b></li>`).join('')}</ul>` : ''}
+  </section>
+  ${petPanelHTML()}
+  <section class="panel">
+    <h2>הסרטון של החנות</h2>
+    <p class="sub">צלמו בטלפון סיבוב בחנות: המדפים, הצוות, הכלבים של הלקוחות. לא צריך לערוך. העריכה החכמה בוחרת את 18 השניות הכי טובות. הסרטון מתנגן בלי קול ברקע של עמדת ה-QR ובראש דף ההרשמה.</p>
+    <div class="vid-zone ${videoURL?'has':''}" id="vidZone" style="margin-top:14px">
+      ${videoURL
+        ? `<video class="vid-prev" id="vidPrev" aria-label="הסרטון של החנות"></video>
+           <div class="row"><button class="btn primary" type="button" data-act="smarttrim" ${usingDefaultVideo?'hidden':''}>עריכה חכמה: הקטעים הכי טובים</button><label class="btn" for="vidFile">החלפת סרטון</label><a class="btn" href="#kiosk">צפייה בעמדה</a>${hasOrig?'<button class="btn" type="button" data-act="revertvid">חזרה למקור</button>':''}<button class="btn danger" type="button" data-act="delvideo">הסרה</button></div>
+           <div class="trim-box" id="trimBox" aria-live="polite" hidden></div>`
+        : `<div class="vid-empty"><b>גררו לכאן סרטון מהחנות</b><span class="hint">או בחרו קובץ מהמחשב · MP4 או MOV · עד ${MAX_VIDEO_MB}MB</span></div>
+           <label class="btn primary" for="vidFile">בחירת סרטון</label>`}
+      <input type="file" id="vidFile" accept="video/*" class="sr">
+    </div>
+    <div class="err" id="vidErr" role="alert"></div>
+  </section>
+  <section class="panel">
+    <h2>המוצרים שהחנות מוכרת</h2>
+    <p class="sub">"שק מחזיק" הוא בערך כמה ימים שק כזה מחזיק ללקוח רגיל. זה החישוב הראשון. אחרי שתי קניות המערכת לומדת את הקצב האמיתי של כל לקוח, ואפשר גם לשנות ללקוח מסוים.</p>
+    <div class="tbl-wrap" style="margin-top:12px"><table>
+      <thead><tr><th scope="col">שם המוצר</th><th scope="col">סוג</th><th scope="col">ק"ג</th><th scope="col">שק מחזיק (ימים)</th><th scope="col">מחיר ₪</th><th scope="col">ברקוד</th><th scope="col"><span hidden>פעולות</span></th></tr></thead>
+      <tbody>${S.products.map(p=>`<tr data-pid="${p.id}">
+        <td><input aria-label="שם המוצר" data-f="name" value="${esc(p.name)}"></td>
+        <td><select aria-label="סוג" data-f="kind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===p.kind?'selected':''}>${v}</option>`).join('')}</select></td>
+        <td><input aria-label="ק״ג" data-f="kg" type="number" min="0.5" step="0.5" value="${p.kg}" class="num"></td>
+        <td><input aria-label="כמה ימים מחזיק שק" data-f="days" type="number" min="3" step="1" value="${p.days||''}" class="num"></td>
+        <td><input aria-label="מחיר" data-f="price" type="number" min="0" value="${p.price}" class="num"></td>
+        <td><input aria-label="ברקוד" data-f="barcode" dir="ltr" inputmode="numeric" value="${esc(p.barcode||'')}" class="num" placeholder="סורקים כאן"></td>
+        <td><button class="btn danger" type="button" data-act="delprod" data-id="${p.id}">מחיקה</button></td></tr>`).join('')}</tbody>
+    </table></div>
+    <div class="row" style="margin-top:12px"><button class="btn" data-act="addprod">+ מוצר</button><button class="btn primary" data-act="saveprods">שמירת מוצרים</button></div>
+  </section>
+  <section class="panel"><h2>החשבון</h2><p class="sub">מחובר כ-<span dir="ltr">${esc(window.__email||'')}</span></p>
+    <div class="row" style="margin-top:12px"><button class="btn" type="button" data-act="logout">יציאה מהחשבון</button></div></section>`;
+
+/* kiosk & join render into #full */
+function renderKiosk(){
+  const full = $('#full');
+  const qrUrl = joinUrl();
+  full.innerHTML = `<div class="kiosk ${videoURL?'has-video':''}">${videoURL?'<video class="k-video" aria-hidden="true"></video><div class="k-shade"></div>':''}<div class="kiosk-in">
+    <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><path d="M11 7h18l4 7v19a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V14z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 14h26" stroke="currentColor" stroke-width="1.4"/><circle cx="20" cy="25" r="6.5" fill="none" stroke="#e2c27f" stroke-width="1.4"/><path d="M20 21v4l2.8 1.8" stroke="#e2c27f" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+    <div class="k-store">${esc(S.store.name)}</div>
+    <h1>שהאוכל לא ייגמר לכם באמצע השבוע</h1>
+    <p>סרקו, ונשלח לכם תזכורת בוואטסאפ כמה ימים לפני שהשק נגמר</p>
+    <div class="qrbox" id="qr" role="img" aria-label="קוד QR להרשמה לתזכורות"></div>
+    <div class="k-acts">
+      <a class="btn" href="${esc(joinUrl(null, true))}">הדגמה: מה הלקוח רואה אחרי הסריקה</a>
+      <button class="btn" type="button" data-act="unlock" data-to="#sale">רישום ע״י המוכר</button>
+      <button class="btn" type="button" data-act="unlock" data-to="#today">יציאה מהעמדה</button>
+      <button class="btn" type="button" id="fsBtn" ${document.fullscreenElement?'hidden':''}>מסך מלא</button>
+    </div>
+    <p class="note">מי שאין לו סמארטפון נרשם דרך "רישום ע״י המוכר".</p>
+  </div></div>`;
+  attachVideo(full.querySelector('.k-video'));
+  try {
+    if (window.QRCode) new QRCode(document.getElementById('qr'), {text:qrUrl, width:300, height:300, colorDark:'#0c3a33', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+    else $('#qr').textContent = 'QR';
+  } catch(e){ $('#qr').textContent = 'QR'; }
+  const fb = $('#fsBtn'); if (fb){ if (!document.documentElement.requestFullscreen) fb.hidden = true; fb.onclick = () => document.documentElement.requestFullscreen?.().catch(() => toast('המכשיר לא מאפשר מסך מלא כאן')); }
+  try { navigator.wakeLock?.request('screen').catch(()=>{}); } catch(e){}
+}
+
+function customerFormHTML(mode, phone='', presetPid=null){
+  const pp = presetPid ? S.products.find(p=>p.id===presetPid) : null;
+  const presetPet = pp ? (pp.kind==='litter' ? 'cat' : pp.kind) : null;
+  const firstPet = presetPet || 'dog';
+  const pets = Object.entries(PETS).map(([k,v])=>`<input type="radio" name="pet" id="pet-${k}" value="${k}" ${k===firstPet?'checked':''}><label for="pet-${k}">${v.label}</label>`).join('');
+  const consent = mode==='join'
+    ? `אני מאשר/ת לקבל מ${esc(S.store.name)} תזכורות והצעות בוואטסאפ. אפשר להסיר בכל עת.`
+    : 'הלקוח אישר בעל-פה לקבל תזכורות והצעות בוואטסאפ';
+  return `<form class="form" id="custForm" novalidate>
+    <div class="grid2">
+      <div class="field"><label for="fName">${mode==='join'?'השם שלך':'שם הלקוח'}</label><input id="fName" autocomplete="name" required></div>
+      <div class="field"><label for="fPhone">טלפון נייד</label><input id="fPhone" class="num" inputmode="tel" autocomplete="tel" placeholder="05X-XXXXXXX" value="${esc(phone)}" required></div>
+    </div>
+    ${pp ? `<div class="preset"><span class="eyebrow">${mode==='join'?'קנית עכשיו':'נמכר עכשיו'}</span><b>${esc(pp.name)} ${pp.kg} ק"ג</b></div>` : ''}
+    <div class="field" ${pp?'hidden':''}><span class="lbl" id="petLbl">מי אוכל?</span><div class="chips" role="radiogroup" aria-labelledby="petLbl">${pets}</div></div>
+    <div class="grid2">
+      <div class="field"><label for="fPetName">שם החיה (לא חובה)</label><input id="fPetName"></div>
+      <div class="field"><label for="fDays">${mode==='join'?'בערך כמה ימים מחזיק לך שק?':'כמה ימים מחזיק לו שק?'}</label><input id="fDays" type="number" min="3" step="1" value="${(pp || S.products.find(p=>kindsFor(firstPet).includes(p.kind)) || {}).days || 30}" class="num"><span class="hint">ממולא לפי המוצר. אפשר לשנות.</span></div>
+    </div>
+    <div class="field" ${pp?'hidden':''}><label for="fProd">איזה מוצר?</label><select id="fProd">${optionsFor(firstPet, presetPid)}</select></div>
+    <label class="check" ${pp?'hidden':''}><input type="checkbox" id="fNow" checked><span>${mode==='join'?'קניתי את זה עכשיו':'נקנה עכשיו'}</span></label>
+    <div id="fRules">${rulesChecks(firstPet, mode)}</div>
+    <label class="check"><input type="checkbox" id="fConsent"><span>${consent}</span></label>
+    <div class="err" id="formErr" role="alert"></div>
+    <button class="btn primary big" type="submit">${mode==='join'?'הירשמו לתזכורות':'שמירה'}</button>
+  </form>`;
+}
+function wireCustomerForm(mode, onDone){
+  const f = $('#custForm');
+  f.addEventListener('change', e => {
+    if (e.target.name==='pet'){
+      const k = e.target.value;
+      $('#fProd').innerHTML = optionsFor(k);
+      $('#fDays').value = prod($('#fProd').value)?.days || 30;
+      $('#fRules').innerHTML = rulesChecks(k, mode);
+    }
+    if (e.target.id==='fProd') $('#fDays').value = prod(e.target.value).days || 30;
+  });
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const err = $('#formErr'); err.textContent='';
+    const name = $('#fName').value.trim(), phone = $('#fPhone').value.trim();
+    const pet = f.querySelector('input[name=pet]:checked').value;
+    if (!name){ err.textContent='חסר שם.'; $('#fName').focus(); return; }
+    if (!validPhone(phone)){ err.textContent='מספר הטלפון צריך להיות נייד ישראלי, 10 ספרות שמתחילות ב-05.'; $('#fPhone').focus(); return; }
+    if (!$('#fConsent').checked){ err.textContent = mode==='join' ? 'כדי לקבל תזכורות צריך לסמן אישור.' : 'בלי אישור של הלקוח אסור לשלוח לו תזכורות. סמן אחרי שהוא אישר.'; return; }
+    if (S.customers.some(c=>normPhone(c.phone)===normPhone(phone))){ err.textContent='המספר הזה כבר רשום.'; return; }
+    const pid = $('#fProd').value, p = prod(pid);
+    if (!pid){ err.textContent='אין מוצר מהסוג הזה. אפשר להוסיף בהגדרות החנות.'; return; }
+    const c = {id:uid(), name, phone:normPhone(phone), pet, petName:$('#fPetName').value.trim(), size:PETS[pet].def, count:1,
+      daysOverride: (Number($('#fDays').value) >= 3 && Number($('#fDays').value) !== p.days) ? Number($('#fDays').value) : null,
+      productId:pid, consent:{date:today(), source:mode==='join'?'qr':'seller'},
+      purchases: $('#fNow').checked ? [{date:today(), productId:pid, price:p.price}] : [], reminders:[],
+      extras: [...f.querySelectorAll('[data-rule]:checked')].map(i => ({id:uid(), ruleId:i.dataset.rule, last:today()}))};
+    S.customers.push(c); save(); onDone(c);
+  });
+}
+
+function renderJoin(presetPid=null){
+  const full = $('#full');
+  full.innerHTML = `<div class="join">
+    <a class="back-link" href="#kiosk">→ חזרה לעמדה (רק בהדגמה)</a>
+    <div class="join-head">${videoURL?'<video class="j-video" aria-label="סרטון מהחנות"></video>':''}<span class="eyebrow" style="color:#e2c27f">שירות תזכורות אישי</span><h1>${esc(S.store.name)}</h1><p>נזכיר לך בוואטסאפ כמה ימים לפני שהאוכל נגמר. בלי ספאם, ואפשר להסיר בכל רגע.</p></div>
+    <div class="panel" id="joinBody">${customerFormHTML('join', '', presetPid)}</div>
+  </div>`;
+  attachVideo(full.querySelector('.j-video'));
+  wireCustomerForm('join', c => {
+    const s = status(c);
+    $('#joinBody').innerHTML = `<div style="display:grid;gap:12px;text-align:center">
+      <h2 style="font-size:1.5rem">נרשמת, ${esc(c.name.split(' ')[0])}!</h2>
+      <p class="sub">לפי החישוב, השק אמור להיגמר בערך ב${fmtLong(s.due)}. נשלח לך תזכורת כמה ימים לפני.</p>
+      ${c.extras.length ? `<p class="sub">ונזכיר לך גם: ${c.extras.map(x=>esc(ruleById(x.ruleId).name)).join(', ')}.</p>` : ''}
+      <a class="btn primary" href="#kiosk">חזרה לעמדה</a></div>`;
+    clearTimeout(window.__backT); window.__backT = setTimeout(() => { if (location.hash.startsWith('#join')) location.hash = '#kiosk'; }, 12000);
+  });
+}
+
+/* customer drawer */
+function openCustomer(id){
+  const c = S.customers.find(x=>x.id===id); if (!c) return;
+  const s = status(c), p = prod(c.productId);
+  const root = $('#overlayRoot');
+  root.innerHTML = `<div class="overlay" data-act="close"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+    <div class="row"><h2 id="dTitle" style="font-size:1.5rem">${esc(c.name)}</h2><span class="spacer"></span><button class="btn" data-act="close" id="dClose">סגירה</button></div>
+    <p class="sub num">${prettyPhone(c.phone)} · ${PETS[c.pet].label}${c.petName?' בשם '+esc(c.petName):''}</p>
+    <div class="calc">
+      <div><span>מוצר</span><b>${esc(p.name)} ${p.kg} ק"ג</b></div>
+      <div><span>שק מחזיק</span><b class="num">${c.daysOverride ? c.daysOverride+' ימים (הוגדר ללקוח)' : s.cy.base+' ימים (לפי המוצר)'}</b></div>
+      <div><span>קצב אמיתי מהקניות</span><b class="num">${s.cy.learned ? s.cy.days+' ימים (לפי '+s.cy.learned+' הפרשים)' : 'עוד אין, צריך שתי קניות'}</b></div>
+      <div><span>קנייה אחרונה</span><b class="num">${fmtD(lastBuy(c))}</b></div>
+      <div><span>צפוי להיגמר</span><b class="num">${fmtLong(s.due)}</b></div>
+      <div><span>אישור לתזכורות</span><b>${c.consent?.source==='qr'?'נרשם לבד ב-QR':'אישר למוכר'} ב-${fmtD(c.consent?.date||today())}</b></div>
+    </div>
+    <div class="xadd" style="margin-top:0"><div class="field"><label for="dDays">כמה ימים מחזיק שק ללקוח הזה</label><input id="dDays" type="number" min="3" step="1" value="${c.daysOverride || p.days || s.cy.base}" class="num"></div><button class="btn" data-act="setdays" data-id="${c.id}">עדכון</button></div>
+    <div><span class="lbl">ההודעה שתישלח</span> <a class="link" href="${esc(replyUrl(c))}" target="_blank" rel="noopener">הדגמה: מה הלקוח רואה ←</a><div class="msg" style="margin-top:6px">${esc(buildMsg(c))}</div></div>
+    <div class="row">
+      <a class="btn wa" href="${esc(waLink(c))}" target="_blank" rel="noopener">פתח בוואטסאפ</a>
+      <button class="btn" data-act="copy" data-id="${c.id}">העתקת ההודעה</button>
+      <button class="btn" data-act="sent" data-id="${c.id}">✓ שלחתי</button>
+      <button class="btn primary" data-act="buy" data-id="${c.id}">נמכר שוב</button>
+    </div>
+    <div><span class="lbl">היסטוריה</span><ul class="hist" style="margin-top:6px">
+      ${[...c.purchases.map(x=>({d:x.date,t:'קנה '+prod(x.productId).name, v:money(x.price)})), ...c.reminders.map(r=>({d:r.date,t:'נשלחה תזכורת',v:''}))]
+        .sort((a,b)=>a.d<b.d?1:-1).map(h=>`<li><span>${fmtD(h.d)} · ${esc(h.t)}</span><b class="num">${h.v}</b></li>`).join('') || '<li>אין עדיין</li>'}
+    </ul></div>
+    ${extrasDrawerHTML(c)}
+    <div id="delRow" class="row"><button class="btn danger" data-act="askdel" data-id="${c.id}">הסרה מהתזכורות</button></div>
+  </div></div>`;
+  $('#dClose').focus();
+}
+function closeDrawer(){ $('#overlayRoot').innerHTML=''; }
+
+/* actions */
+function recordBuy(id, pid, src){
+  const c = S.customers.find(x=>x.id===id); if (!c) return;
+  if (pid) c.productId = pid;
+  const p = prod(c.productId);
+  c.purchases.push({date:today(), productId:p.id, price:p.price, src:src||'manual'});
+  if (src) logPos((src==='pos'?'מהקופה: ':'נסרק: ')+c.name+' · '+p.name+' '+p.kg+' ק"ג');
+  save();
+  const s = status(c);
+  toast((src==='pos' ? 'התקבל מהקופה: '+c.name.split(' ')[0]+' קנה '+p.name+'. נרשם אוטומטית. ' : 'נרשם. ')+'תזכורת הבאה בערך ב'+fmtLong(addDays(s.due,-4)));
+}
+function markSent(id){
+  const c = S.customers.find(x=>x.id===id); if (!c) return;
+  if (lastRem(c) !== today()) c.reminders.push({date:today()});
+  save(); toast('סומן שנשלחה תזכורת ל'+c.name.split(' ')[0]);
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const a = t.dataset.act, id = t.dataset.id;
+  if (a==='close'){ if (e.target===t) closeDrawer(); return; }
+  if (a==='open'){ openCustomer(id); return; }
+  if (a==='opened'){ return; } // link opens WhatsApp; user confirms with "שלחתי"
+  if (a==='sent'){ markSent(id); closeDrawer(); route(); return; }
+  if (a==='buy'){
+    const sel = document.querySelector(`select[data-act="altprod"][data-id="${id}"]`);
+    recordBuy(id, sel ? sel.value : null); closeDrawer();
+    if (location.hash==='#sale'){ salePid = null; route(); } else route();
+    return;
+  }
+  if (a==='copy'){
+    const c = S.customers.find(x=>x.id===id), txt = buildMsg(c);
+    navigator.clipboard?.writeText(txt).then(()=>toast('ההודעה הועתקה'), ()=>toast('לא הצלחתי להעתיק. סמן את הטקסט ידנית.'));
+    return;
+  }
+  if (a==='askdel'){
+    $('#delRow').innerHTML = `<span>להסיר את ${esc(S.customers.find(x=>x.id===id).name)} מהתזכורות?</span><button class="btn danger" data-act="del" data-id="${id}">כן, להסיר</button><button class="btn" data-act="nodel" data-id="${id}">ביטול</button>`;
+    return;
+  }
+  if (a==='nodel'){ openCustomer(id); return; }
+  if (a==='del'){ S.customers = S.customers.filter(x=>x.id!==id); save(); closeDrawer(); route(); toast('הלקוח הוסר'); return; }
+  if (a==='pettab'){ syncPetPane(); save(); petTab = t.dataset.pet; $('#petPanel').outerHTML = petPanelHTML(); return; }
+  if (a==='saverules'){ syncPetPane(); save(); toast('התזכורות של '+PETS[petTab].label+' נשמרו'); $('#petPanel').outerHTML = petPanelHTML(); return; }
+  if (a==='addrule' && t.dataset.pet){ syncPetPane(); S.rules.push({id:'r'+uid(), name:'תזכורת חדשה', pets:[t.dataset.pet], every:30, template:'היי {שם}, כאן {חנות}.\n\n(להפסקת תזכורות השב/י "הסר")'}); save(); $('#petPanel').outerHTML = petPanelHTML(); const cs = document.querySelectorAll('#petPanel .rule'); cs[cs.length-1]?.querySelector('input')?.focus(); return; }
+  if (a==='pickprod'){ salePid = salePid===t.dataset.pid ? null : t.dataset.pid; document.querySelectorAll('.pick-prod').forEach(b => b.setAttribute('aria-pressed', b.dataset.pid===salePid)); saleResults($('#saleSearch').value); $('#saleSearch').focus(); return; }
+  if (handleExtraAct(a, t, e)) return;
+  if (handleReplyAct(a, t)) return;
+  if (a==='setdays'){ const c = S.customers.find(x=>x.id===id), v = Number($('#dDays').value); if (!(v>=3)){ toast('מספר ימים לא תקין'); return; } c.daysOverride = v === prod(c.productId).days ? null : v; save(); openCustomer(id); toast('עודכן. התזכורת הבאה ב'+fmtLong(addDays(status(c).due,-4))); return; }
+  if (a==='o-sold'){ const c = S.customers.find(x=>x.id===id); const pid = c.pendingOrder.productId; delete c.pendingOrder; recordBuy(id, pid); route(); return; }
+  if (a==='o-cancel'){ const c = S.customers.find(x=>x.id===id); delete c.pendingOrder; save(); route(); return; }
+  if (a==='newcust'){
+    closeDrawer();
+    if (location.hash!=='#sale' && location.hash!=='#today' && location.hash!=='#customers'){ history.replaceState(null,'','#sale'); route(); }
+    $('#view').innerHTML = `<section class="panel"><div class="row"><h2>לקוח חדש</h2><span class="spacer"></span><a class="btn" href="#sale">ביטול</a></div><div style="margin-top:12px">${customerFormHTML('seller', t.dataset.phone||'', t.dataset.pid||null)}</div></section>`;
+    wireCustomerForm('seller', c => { const s=status(c); toast('נשמר. תזכורת בערך ב'+fmtLong(addDays(s.due,-4))); location.hash='#sale'; route(); });
+    $('#fName').focus(); return;
+  }
+  if (a==='smarttrim'){ runSmartTrim(); return; }
+  if (a==='copylink'){ navigator.clipboard?.writeText(joinUrl()).then(()=>toast('הקישור הועתק'), ()=>toast('לא הצלחתי להעתיק')); return; }
+  if (a==='logout'){ sb.auth.signOut(); return; }
+  if (a==='savetrim'){ saveTrim(); return; }
+  if (a==='canceltrim'){ trimBlob = null; $('#trimBox').hidden = true; return; }
+  if (a==='revertvid'){ revertOrig(); return; }
+  if (a==='delvideo'){ deleteVideo(); return; }
+  if (a==='addprod'){ syncProducts(); S.products.push({id:'p'+uid(), name:'מוצר חדש', kind:'dog', kg:10, days:30, price:100}); save(); route(); return; }
+  if (a==='delprod'){
+    if (S.customers.some(c=>c.productId===id)){ toast('יש לקוחות על המוצר הזה, אי אפשר למחוק'); return; }
+    syncProducts(); S.products = S.products.filter(p=>p.id!==id); save(); route(); return;
+  }
+  if (a==='saveprods'){ syncProducts(); save(); toast('המוצרים נשמרו'); route(); return; }
+  if (a==='reset'){ $('#resetRow').innerHTML = `<span>למחוק את כל השינויים ולחזור לנתוני הדוגמה?</span><button class="btn danger" data-act="doreset">כן, איפוס</button><button class="btn" data-act="noreset">ביטול</button>`; return; }
+  if (a==='noreset'){ route(); return; }
+});
+document.addEventListener('keydown', e => { if (e.key==='Escape' && $('#overlayRoot').innerHTML) closeDrawer(); });
+function syncProducts(){
+  document.querySelectorAll('tr[data-pid]').forEach(tr => {
+    const p = S.products.find(x=>x.id===tr.dataset.pid); if (!p) return;
+    tr.querySelectorAll('[data-f]').forEach(inp => { const f = inp.dataset.f; p[f] = (f==='kg'||f==='price'||f==='days') ? (Number(inp.value)||p[f]) : f==='barcode' ? inp.value.replace(/\D/g,'') : inp.value; });
+  });
+}
+
+/* router */
+const SHELL_VIEWS = ['today','sale','customers','report','setup'];
+function route(){
+  if (!S) return;
+  const h = (location.hash||'#today').slice(1);
+  closeDrawer();
+  $('#storeLabel').textContent = S.store.name;
+  if (h==='kiosk'){
+    $('#shell').hidden = true; $('#full').hidden = false;
+    renderKiosk();
+    window.scrollTo(0,0); return;
+  }
+  $('#full').hidden = true; $('#full').innerHTML=''; $('#shell').hidden = false;
+  const v = SHELL_VIEWS.includes(h) ? h : 'today';
+  document.querySelectorAll('.tabs a').forEach(a => a.getAttribute('href')==='#'+v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
+  $('#view').innerHTML = views[v]();
+  if (v==='sale'){
+    const i=$('#saleSearch'); i.addEventListener('input', ()=>saleResults(i.value)); saleResults(''); i.focus();
+    i.addEventListener('keydown', e => { if (e.key==='Enter'){ const d = normPhone(i.value); if (d.length>=8 && !d.startsWith('05')){ e.preventDefault(); i.value=''; saleResults(''); handleScan(d); } } });
+  }
+  if (v==='customers'){
+    $('#custFilter').addEventListener('input', e => {
+      const q = e.target.value.trim(), nq = normPhone(q);
+      const rows = S.customers.filter(c => !q || c.name.includes(q) || (c.petName||'').includes(q) || (nq && normPhone(c.phone).includes(nq)))
+        .map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
+      $('#custList').innerHTML = rows.map(x=>custRow(x.c,'list')).join('') || '<div class="empty">לא נמצא</div>';
+    });
+  }
+  if (v==='setup'){
+    $('#bcTest').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); const d = e.target.value.replace(/\D/g,''); e.target.value=''; if (d.length>=4) handleScan(d); } });
+    attachVideo($('#vidPrev'));
+    $('#vidFile').addEventListener('change', e => saveVideoFile(e.target.files[0]));
+    const z = $('#vidZone');
+    ['dragenter','dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
+    ['dragleave','drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));
+    z.addEventListener('drop', e => saveVideoFile(e.dataTransfer.files[0]));
+    $('#storeForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const n = $('#sName').value.trim(), w = $('#sWa').value.trim();
+      if (!n){ $('#storeErr').textContent='חסר שם חנות.'; return; }
+      if (w && !validPhone(w)){ $('#storeErr').textContent='מספר הוואטסאפ צריך להיות נייד ישראלי, 10 ספרות.'; return; }
+      S.store.name = n; S.store.whatsapp = normPhone(w);
+      const pin = $('#sPin').value.trim(); if (!/^\d{4}$/.test(pin)){ $('#storeErr').textContent='הקוד צריך להיות 4 ספרות.'; return; }
+      S.store.pin = pin; S.store.autoKiosk = $('#sAuto').checked; save(); toast('נשמר'); route();
+    });
+  }
+}
+/* ---------- kiosk lock: PIN to leave, auto-return when idle ---------- */
+function openPin(to){
+  let code = '';
+  modal(`<span class="eyebrow">צוות החנות בלבד</span><h2 id="mTitle">הקלידו קוד</h2>
+    <div class="pin-dots" aria-hidden="true">${'<i></i>'.repeat(4)}</div>
+    <div class="pin-err" id="pinErr" role="alert"></div>
+    <div class="pin-pad">${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k => k==='' ? '<span></span>' : `<button type="button" data-k="${k}" aria-label="${k==='⌫'?'מחיקה':k}">${k}</button>`).join('')}</div>
+    <button class="btn ghost" type="button" data-act="close">ביטול</button>`);
+  const dots = () => document.querySelectorAll('.pin-dots i').forEach((d,i) => d.classList.toggle('on', i < code.length));
+  const press = k => {
+    if (k==='⌫') code = code.slice(0,-1); else if (code.length < 4) code += k;
+    dots();
+    if (code.length === 4){
+      if (code === (S.store.pin||'1234')){ closeDrawer(); unlockedAt = Date.now(); location.hash = to; }
+      else { $('#pinErr').textContent = 'קוד שגוי'; code = ''; setTimeout(dots, 150); }
+    }
+  };
+  document.querySelectorAll('.pin-pad [data-k]').forEach(b => b.addEventListener('click', () => press(b.dataset.k)));
+  const onKey = e => { if (!$('.pin-pad')){ document.removeEventListener('keydown', onKey); return; } if (/^\d$/.test(e.key)) press(e.key); if (e.key==='Backspace') press('⌫'); };
+  document.addEventListener('keydown', onKey);
+}
+let unlockedAt = 0, lastActive = Date.now();
+['pointerdown','keydown','wheel','touchstart','mousemove'].forEach(ev => document.addEventListener(ev, () => { lastActive = Date.now(); const b = $('#idleBar'); if (b) b.remove(); }, {passive:true, capture:true}));
+document.addEventListener('click', e => { const t = e.target.closest('[data-act="unlock"]'); if (t){ e.stopPropagation(); openPin(t.dataset.to); } }, true);
+setInterval(() => {
+  if (!S) return;
+  const h = location.hash || '#today';
+  const inShell = !(h==='#kiosk' || h.startsWith('#join') || h.startsWith('#reply'));
+  const idle = (Date.now() - lastActive) / 1000;
+  if (h.startsWith('#join') || h.startsWith('#reply')){ if (idle > 60 && h.startsWith('#join')) location.hash = '#kiosk'; return; }
+  if (!inShell || S.store.autoKiosk === false || trimBusy) { $('#idleBar')?.remove(); return; }
+  if (idle >= 20){ $('#idleBar')?.remove(); closeDrawer(); location.hash = '#kiosk'; return; }
+  if (idle >= 14 && !$('#idleBar')){
+    const b = document.createElement('div'); b.className = 'idle-bar'; b.id = 'idleBar'; b.setAttribute('role','status');
+    b.innerHTML = '<span>חוזרים לעמדת ה-QR בעוד כמה שניות</span><button type="button">להישאר כאן</button>';
+    document.body.appendChild(b);
+  }
+}, 1000);
+
+document.addEventListener('fullscreenchange', () => { const fb = document.getElementById('fsBtn'); if (fb) fb.hidden = !!document.fullscreenElement; });
+window.addEventListener('hashchange', route);
+function showFull(html){ $('#shell').hidden = true; $('#full').hidden = false; $('#full').innerHTML = html; }
+const LOGO_SVG = '<svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><path d="M11 7h18l4 7v19a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V14z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 14h26" stroke="currentColor" stroke-width="1.6"/><circle cx="20" cy="25" r="6.5" fill="none" stroke="#c9a45c" stroke-width="1.6"/><path d="M20 21v4l2.8 1.8" stroke="#c9a45c" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>';
 /* ---------- auth ---------- */
 function renderAuth(mode='login', msg=''){
   showFull(`<div class="auth"><div class="auth-card">
@@ -207,446 +1683,6 @@ function renderOnboarding(){
   };
 }
 
-/* ---------- views ---------- */
-function bagHTML(s){
-  const C = 2*Math.PI*24, off = C*(1-s.frac);
-  const col = (s.st==='overdue'||s.st==='followup') ? 'var(--danger)' : s.st==='due' ? 'var(--brass)' : s.st==='sent' ? 'var(--muted)' : 'var(--em-ring)';
-  return `<div class="ring" aria-hidden="true"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="24" class="trk"/><circle cx="29" cy="29" r="24" class="val" style="stroke:${col};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${off.toFixed(1)}"/></svg><b class="num">${Math.max(0,s.left)}</b><small>ימים</small></div>`;
-}
-function custRow(c, mode){
-  const s = status(c), p = prod(c.productId);
-  const leftTxt = s.left<0 ? 'נגמר לפני כ-'+(-s.left)+' ימים' : s.left===0 ? 'נגמר היום' : 'נשארו כ-'+s.left+' ימים';
-  const acts = mode==='today'
-    ? `<a class="btn wa" href="${esc(waLink(c))}" target="_blank" rel="noopener">פתח בוואטסאפ</a><button class="btn" data-act="sent" data-id="${c.id}">✓ שלחתי</button>`
-    : `<button class="btn" data-act="buy" data-id="${c.id}">נמכר שוב</button>`;
-  return `<div class="cust">${bagHTML(s)}
-    <div class="who">
-      <div class="row" style="gap:8px"><strong>${esc(c.name)}</strong><span class="pill st-${s.st}">${ST_LABEL[s.st]}</span></div>
-      <div class="meta">${esc(petPhrase(c))} · ${esc(p.name)} ${p.kg} ק"ג · <span class="num">${leftTxt}</span>${s.st==='sent'||s.st==='followup' ? ' · תזכורת '+ago(s.R) : ''}</div>
-      <div><button class="link" data-act="open" data-id="${c.id}">פרטים וחישוב ←</button></div>
-    </div><div class="acts">${acts}</div></div>`;
-}
-function optionsFor(pet, sel){
-  return S.products.filter(p => p.active && kindsFor(pet).includes(p.kind))
-    .map(p => `<option value="${p.id}" ${p.id===sel?'selected':''}>${esc(p.name)} ${p.kg} ק"ג</option>`).join('');
-}
-function eodHTML(todays){
-  let total=0; for (let i=1;i<=14;i++){ const d=addDays(today(),-i); total += S.customers.reduce((a,c)=>a+c.purchases.filter(p=>p.date===d).length,0); }
-  const avg = total/14, low = avg >= 1 && todays < avg*0.6;
-  return `<p class="sub">היום נרשמו <b class="num">${todays}</b> מכירות של מזון וחול. בממוצע נרשמות <b class="num">${avg.toFixed(1)}</b> ביום.</p>
-  ${low ? `<p style="margin:.5em 0 0;color:var(--warn);font-weight:600">נרשמו פחות מכירות מהרגיל. אולי מכירות מהיום לא נרשמו?</p>` : `<p style="margin:.5em 0 0;color:var(--ok);font-weight:600">נראה תקין.</p>`}`;
-}
-
-const views = {};
-views.today = () => {
-  const all = S.customers.map(c => ({c, s:status(c)}));
-  const act = all.filter(x => needsAction(x.s)).sort((a,b)=>a.s.left-b.s.left);
-  const waiting = all.filter(x => x.s.st==='sent');
-  const ret = returns(30), rev = ret.reduce((a,x)=>a+x.b.price,0);
-  const todays = S.customers.reduce((a,c)=>a+c.purchases.filter(p=>p.date===today()).length,0);
-  const h = new Date().getHours();
-  if (!S.customers.length) return `<div class="hello"><span class="eyebrow">${fmtLong(today())}</span><h2>ברוכים הבאים, ${esc(S.store.name)}</h2>
-    <p class="sub">עוד אין לקוחות. שלושה צעדים כדי להתחיל:</p></div>
-    <section class="panel"><ol style="margin:0;padding-inline-start:20px;display:grid;gap:10px">
-      <li><a href="#setup">בהגדרות</a>: בדקו את רשימת המוצרים והמחירים, והעלו סרטון של החנות.</li>
-      <li>שימו טאבלט ליד הקופה <a href="#kiosk">על עמדת ה-QR</a>, או הדפיסו את קישור ההרשמה.</li>
-      <li>אחרי כל מכירה של מזון: <a href="#sale">רישום מכירה</a>. מחר בבוקר כבר תופיע כאן רשימה.</li></ol></section>`;
-  return `<div class="hello"><span class="eyebrow">${fmtLong(today())}</span>
-    <h2>${h<12?'בוקר טוב':h<18?'צהריים טובים':'ערב טוב'}. ${act.length ? act.length+' לקוחות מחכים לך היום.' : 'כל הלקוחות מכוסים.'}</h2>
-    <p class="sub">אלה הלקוחות שהאוכל שלהם נגמר בימים הקרובים. הודעה אחת עכשיו, והם קונים אצלך ולא באינטרנט.</p></div>
-  <div class="kpis">
-    <div class="kpi hero"><span>לפנות היום</span><b class="num">${act.length}</b></div>
-    <div class="kpi"><span>מחכים לתשובה</span><b class="num">${waiting.length}</b></div>
-    <div class="kpi"><span>חזרו אחרי תזכורת · 30 יום</span><b class="num">${ret.length}</b></div>
-    <div class="kpi gold"><span>הכנסה שהמערכת החזירה</span><b class="num">${money(rev)}</b></div></div>
-  <section class="panel">
-    <div class="row"><h2>למי לפנות היום</h2><span class="spacer"></span><a class="btn" href="#sale">+ רישום מכירה</a></div>
-    <p class="sub">"פתח בוואטסאפ" פותח הודעה מוכנה לשליחה מהוואטסאפ של החנות. אחרי ששלחת, לחץ "שלחתי".</p>
-    <div class="list">${act.length ? act.map(x=>custRow(x.c,'today')).join('') : '<div class="empty">אין למי לפנות היום. כל השקים מלאים.</div>'}</div>
-    ${waiting.length ? `<details class="more"><summary>מחכים לתשובה (${waiting.length})</summary><div class="list">${waiting.map(x=>custRow(x.c,'list')).join('')}</div></details>`:''}
-  </section>
-  <section class="panel"><h2>בדיקת סוף יום</h2>${eodHTML(todays)}</section>`;
-};
-views.customers = () => {
-  const rows = S.customers.map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
-  return `<section class="panel">
-    <div class="row"><h2>כל הלקוחות</h2><span class="sub">(${S.customers.length})</span><span class="spacer"></span><a class="btn primary" href="#sale">+ לקוח חדש / מכירה</a></div>
-    <div class="field" style="margin-top:12px"><label for="custFilter">חיפוש</label><input id="custFilter" placeholder="שם, טלפון או שם החיה"></div>
-    <div class="list" id="custList">${rows.map(x=>custRow(x.c,'list')).join('') || '<div class="empty">עוד אין לקוחות</div>'}</div></section>`;
-};
-views.sale = () => `<section class="panel"><h2>רישום מכירה</h2>
-    <p class="sub">אחרי כל מכירה של מזון או חול: מקלידים טלפון, בוחרים, וזהו. 5 שניות.</p>
-    <div class="field" style="margin-top:14px"><label for="saleSearch">טלפון הלקוח או שם</label>
-      <input id="saleSearch" class="search num" inputmode="tel" autocomplete="off" placeholder="05X-XXXXXXX"></div>
-    <div id="saleResults" class="list"></div></section>`;
-function saleResults(q){
-  const nq = normPhone(q), t = q.trim(), box = $('#saleResults'); if (!box) return;
-  if (!t){ box.innerHTML = '<div class="empty">התחל להקליד מספר טלפון</div>'; return; }
-  const hits = S.customers.filter(c => (nq.length>=3 && c.phone.includes(nq)) || (!/\d/.test(t) && (c.name.includes(t) || (c.petName||'').includes(t))));
-  let html = hits.slice(0,5).map(c => {
-    const p = prod(c.productId), s = status(c);
-    return `<div class="panel" style="padding:16px">
-      <div class="row"><strong style="font-size:1.15rem">${esc(c.name)}</strong><span class="sub num">${prettyPhone(c.phone)}</span><span class="pill st-${s.st}">${ST_LABEL[s.st]}</span></div>
-      <p class="sub">${esc(petPhrase(c))} · קנה לאחרונה ${ago(lastBuy(c))}</p>
-      <div class="row" style="margin-top:10px">
-        <button class="btn primary big" data-act="buy" data-id="${c.id}">נמכר: ${esc(p.name)} ${p.kg} ק"ג (${money(p.price)})</button>
-        <select class="btn" data-id="${c.id}" data-act="altprod" aria-label="מוצר אחר">${optionsFor(c.pet, c.productId)}</select></div></div>`;
-  }).join('');
-  if (!hits.length) html = '<div class="empty">לקוח לא נמצא.</div>';
-  html += `<button class="btn big" data-act="newcust" data-phone="${esc(validPhone(q)?normPhone(q):'')}">+ לקוח חדש${validPhone(q)?' עם המספר '+prettyPhone(q):''}</button>`;
-  box.innerHTML = html;
-}
-views.report = () => {
-  const ret = returns(30), rev = ret.reduce((a,x)=>a+x.b.price,0), since = addDays(today(), -30);
-  const sent = S.customers.reduce((a,c)=>a+c.reminders.filter(r=>r.date>=since).length,0);
-  const rate = sent ? Math.round(ret.length/sent*100) : 0, qr = S.customers.filter(c=>c.consent.source==='qr').length;
-  const fee = 149, mult = rev/fee;
-  return `<div class="hello"><span class="eyebrow">${fmtD(since)} – ${fmtD(today())}</span><h2>דוח 30 הימים האחרונים</h2></div>
-  <div class="roi"><div><h2>המערכת החזירה לך ${money(rev)} במכירות</h2><p>המנוי עולה ${money(fee)} בחודש. נספרת כל קנייה שהגיעה עד 10 ימים אחרי תזכורת.</p></div>
-    <div class="mult num" dir="ltr">×${mult.toFixed(1)}</div></div>
-  <div class="kpis">
-    <div class="kpi"><span>לקוחות שחזרו אחרי תזכורת</span><b class="num">${ret.length}</b></div>
-    <div class="kpi"><span>תזכורות שנשלחו</span><b class="num">${sent}</b></div>
-    <div class="kpi gold"><span>מהתזכורות הביאו קנייה</span><b class="num">${rate}%</b></div>
-    <div class="kpi"><span>נרשמו לבד דרך ה-QR</span><b class="num">${qr}</b></div></div>
-  <section class="panel"><h2>מי חזר בזכות תזכורת</h2>
-    <div class="list">${ret.length ? ret.sort((a,b)=>a.b.date<b.b.date?1:-1).map(x=>`
-      <div class="cust" style="grid-template-columns:1fr auto"><div class="who"><strong>${esc(x.c.name)}</strong>
-      <div class="meta">תזכורת ב-${fmtD(x.r.date)} ← קנה ב-${fmtD(x.b.date)} (${diff(x.b.date,x.r.date)===0?'באותו יום':'אחרי '+diff(x.b.date,x.r.date)+' ימים'})</div></div>
-      <b class="num">${money(x.b.price)}</b></div>`).join('') : '<div class="empty">עוד אין קניות שחזרו אחרי תזכורת.</div>'}</div></section>`;
-};
-views.setup = () => `<section class="panel"><h2>קישור ההרשמה של החנות</h2>
-    <p class="sub">זה הקישור שה-QR פותח. אפשר גם לשים אותו באתר, באינסטגרם או בסטטוס.</p>
-    <div class="linkbox" style="margin-top:12px"><code id="joinLink">${esc(joinUrl())}</code><button class="btn" data-act="copylink">העתקה</button></div></section>
-  <section class="panel"><h2>פרטי החנות</h2>
-    <form class="form" id="storeForm" style="margin-top:12px">
-      <div class="grid2">
-        <div class="field"><label for="sName">שם החנות</label><input id="sName" value="${esc(S.store.name)}" required></div>
-        <div class="field"><label for="sWa">מספר הוואטסאפ של החנות</label><input id="sWa" class="num" inputmode="tel" value="${esc(S.store.whatsapp||'')}"></div></div>
-      <div class="field"><label for="sTpl">נוסח התזכורת</label><textarea id="sTpl">${esc(S.store.template)}</textarea>
-        <span class="hint">אפשר להשתמש ב: {שם} {חנות} {חיה} {מה} {ימים} {מוצר}. לפי חוק הספאם, הודעה שיווקית צריכה לכלול דרך להסרה.</span></div>
-      <div class="row"><button class="btn primary" type="submit">שמירה</button><span class="err" id="storeErr" role="alert"></span></div>
-    </form></section>
-  <section class="panel"><h2>הסרטון של החנות</h2>
-    <p class="sub">צלמו בטלפון סיבוב בחנות: המדפים, הצוות, הכלבים של הלקוחות. לא צריך לערוך. העריכה החכמה בוחרת את 18 השניות הכי טובות. הסרטון מתנגן בלי קול ברקע של עמדת ה-QR ובראש דף ההרשמה.</p>
-    <div class="vid-zone ${videoURL?'has':''}" id="vidZone" style="margin-top:14px">
-      ${videoURL
-        ? `<video class="vid-prev" id="vidPrev" aria-label="הסרטון של החנות" muted loop playsinline autoplay></video>
-           <div class="row"><button class="btn primary" type="button" data-act="smarttrim">עריכה חכמה: הקטעים הכי טובים</button><label class="btn" for="vidFile">החלפת סרטון</label><a class="btn" href="#kiosk">צפייה בעמדה</a>${S.store.video_orig_path?'<button class="btn" type="button" data-act="revertvid">חזרה למקור</button>':''}<button class="btn danger" type="button" data-act="delvideo">הסרה</button></div>
-           <div class="trim-box" id="trimBox" aria-live="polite" hidden></div>`
-        : `<div class="vid-empty"><b>גררו לכאן סרטון מהחנות</b><span class="hint">או בחרו קובץ · MP4 או MOV · עד ${MAX_VIDEO_MB}MB</span></div>
-           <label class="btn primary" for="vidFile">בחירת סרטון</label>`}
-      <input type="file" id="vidFile" accept="video/*" class="sr"></div>
-    <div class="err" id="vidErr" role="alert"></div></section>
-  <section class="panel"><h2>המוצרים שהחנות מוכרת</h2>
-    <p class="sub">גודל השק קובע את החישוב הראשוני. אחרי שתי רכישות המערכת לומדת את הקצב האמיתי של כל לקוח.</p>
-    <div class="tbl-wrap" style="margin-top:12px"><table>
-      <thead><tr><th scope="col">שם המוצר</th><th scope="col">סוג</th><th scope="col">ק"ג</th><th scope="col">מחיר ₪</th><th scope="col"><span class="sr">פעולות</span></th></tr></thead>
-      <tbody>${S.products.filter(p=>p.active).map(p=>`<tr data-pid="${p.id}">
-        <td><input aria-label="שם המוצר" data-f="name" value="${esc(p.name)}"></td>
-        <td><select aria-label="סוג" data-f="kind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${k===p.kind?'selected':''}>${v}</option>`).join('')}</select></td>
-        <td><input aria-label="ק״ג" data-f="kg" type="number" min="0.5" step="0.5" value="${p.kg}" class="num"></td>
-        <td><input aria-label="מחיר" data-f="price" type="number" min="0" value="${p.price}" class="num"></td>
-        <td><button class="btn danger" type="button" data-act="delprod" data-id="${p.id}">הסרה</button></td></tr>`).join('')}</tbody>
-    </table></div>
-    <div class="row" style="margin-top:12px"><button class="btn" data-act="addprod">+ מוצר</button><button class="btn primary" data-act="saveprods">שמירת מוצרים</button></div></section>
-  <section class="panel"><h2>החשבון</h2><p class="sub">מחובר כ-<span dir="ltr">${esc(window.__email||'')}</span></p>
-    <div class="row" style="margin-top:12px"><button class="btn" data-act="logout">יציאה</button></div></section>`;
-
-/* ---------- kiosk ---------- */
-function attachVideo(v, src){
-  if (!v || !src) return;
-  v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.src = src; v.play().catch(()=>{});
-}
-function renderKiosk(){
-  showFull(`<div class="kiosk ${videoURL?'has-video':''}">${videoURL?'<video class="k-video" aria-hidden="true"></video><div class="k-shade"></div>':''}<div class="kiosk-in">
-    ${LOGO_SVG.replace('class="logo"','class="logo" style="color:#f4f0e6"')}
-    <div class="k-store">${esc(S.store.name)}</div>
-    <h1>שהאוכל לא ייגמר לכם באמצע השבוע</h1>
-    <p>סרקו, ונשלח לכם תזכורת בוואטסאפ כמה ימים לפני שהשק נגמר</p>
-    <div class="qrbox" id="qr" role="img" aria-label="קוד QR להרשמה לתזכורות"></div>
-    <div class="k-acts"><a class="btn" href="#sale">רישום ע״י המוכר</a><button class="btn" id="fsBtn" type="button">מסך מלא</button><a class="btn" href="#today">יציאה מהעמדה</a></div>
-  </div></div>`);
-  attachVideo($('.k-video'), videoURL);
-  try { new QRCode($('#qr'), {text:joinUrl(), width:300, height:300, colorDark:'#0c3a33', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M}); } catch(e){ $('#qr').textContent = joinUrl(); }
-  $('#fsBtn').onclick = () => document.documentElement.requestFullscreen?.().catch(()=>{});
-  try { navigator.wakeLock?.request('screen').catch(()=>{}); } catch(e){}
-}
-
-/* ---------- forms ---------- */
-function customerFormHTML(phone=''){
-  const pets = Object.entries(PETS).map(([k,v],i)=>`<input type="radio" name="pet" id="pet-${k}" value="${k}" ${i===0?'checked':''}><label for="pet-${k}">${v.label}</label>`).join('');
-  return `<form class="form" id="custForm" novalidate>
-    <div class="grid2">
-      <div class="field"><label for="fName">שם הלקוח</label><input id="fName" required></div>
-      <div class="field"><label for="fPhone">טלפון נייד</label><input id="fPhone" class="num" inputmode="tel" placeholder="05X-XXXXXXX" value="${esc(phone)}" required></div></div>
-    <div class="field"><span class="lbl" id="petLbl">מי אוכל?</span><div class="chips" role="radiogroup" aria-labelledby="petLbl">${pets}</div></div>
-    <div class="grid2">
-      <div class="field"><label for="fPetName">שם החיה (לא חובה)</label><input id="fPetName"></div>
-      <div class="field"><label for="fSize" id="sizeLbl">${PETS.dog.size}</label><input id="fSize" type="number" min="1" step="1" value="${PETS.dog.def}" class="num"></div></div>
-    <div class="field"><label for="fProd">איזה מוצר?</label><select id="fProd">${optionsFor('dog')}</select></div>
-    <label class="check"><input type="checkbox" id="fNow" checked><span>נקנה עכשיו</span></label>
-    <label class="check"><input type="checkbox" id="fConsent"><span>הלקוח אישר בעל-פה לקבל תזכורות והצעות בוואטסאפ</span></label>
-    <div class="err" id="formErr" role="alert"></div>
-    <button class="btn primary big" type="submit">שמירה</button></form>`;
-}
-function wireCustomerForm(){
-  const f = $('#custForm');
-  f.addEventListener('change', e => { if (e.target.name==='pet'){ const k = e.target.value; $('#sizeLbl').textContent = PETS[k].size; $('#fSize').value = PETS[k].def; $('#fProd').innerHTML = optionsFor(k); } });
-  f.addEventListener('submit', async e => {
-    e.preventDefault();
-    const err = $('#formErr'); err.textContent='';
-    const name = $('#fName').value.trim(), phone = normPhone($('#fPhone').value), pet = f.querySelector('input[name=pet]:checked').value, pid = $('#fProd').value;
-    if (!name){ err.textContent='חסר שם.'; $('#fName').focus(); return; }
-    if (!validPhone(phone)){ err.textContent='מספר הטלפון צריך להיות נייד ישראלי, 10 ספרות שמתחילות ב-05.'; $('#fPhone').focus(); return; }
-    if (!pid){ err.textContent='אין מוצר מהסוג הזה. הוסיפו אותו בהגדרות החנות.'; return; }
-    if (!$('#fConsent').checked){ err.textContent='בלי אישור של הלקוח אסור לשלוח לו תזכורות. סמן אחרי שהוא אישר.'; return; }
-    const btn = e.submitter; if (btn) btn.disabled = true;
-    try {
-      const {data, error} = await sb.from('customers').insert({store_id:S.store.id, name, phone, pet, pet_name:$('#fPetName').value.trim()||null,
-        size:Number($('#fSize').value)||PETS[pet].def, product_id:pid, consent_source:'seller'}).select().single();
-      if (error){ err.textContent = error.code==='23505' ? 'המספר הזה כבר רשום (אולי הלקוח ביקש להסיר את עצמו).' : 'השמירה נכשלה: '+error.message; return; }
-      const c = mapCustomer(data, {}, {});
-      S.customers.push(c);
-      if ($('#fNow').checked) await addPurchase(c, pid);
-      const s = status(c); toast('נשמר. תזכורת בערך ב'+fmtLong(addDays(s.due,-4)));
-      location.hash = '#sale'; route();
-    } catch(ex){ fail(ex); } finally { if (btn) btn.disabled = false; }
-  });
-}
-
-/* ---------- drawer ---------- */
-function openCustomer(id){
-  const c = S.customers.find(x=>x.id===id); if (!c) return;
-  const s = status(c), p = prod(c.productId), daily = Math.round(dailyGrams(c, p));
-  $('#overlayRoot').innerHTML = `<div class="overlay" data-act="close"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle">
-    <div class="row"><h2 id="dTitle" style="font-size:1.6rem">${esc(c.name)}</h2><span class="spacer"></span><button class="btn" data-act="close" id="dClose">סגירה</button></div>
-    <p class="sub num">${prettyPhone(c.phone)} · ${PETS[c.pet].label}${c.petName?' בשם '+esc(c.petName):''} · ${PETS[c.pet].weight ? c.size+' ק"ג' : c.size+' '+PETS[c.pet].label}</p>
-    <div class="calc">
-      <div><span>מוצר</span><b>${esc(p.name)} ${p.kg} ק"ג</b></div>
-      <div><span>חישוב לפי גודל השק</span><b class="num">${s.cy.base} ימים (~${daily} גרם ביום)</b></div>
-      <div><span>קצב אמיתי מהקניות</span><b class="num">${s.cy.learned ? s.cy.days+' ימים (לפי '+s.cy.learned+' הפרשים)' : 'עוד אין, צריך שתי קניות'}</b></div>
-      <div><span>קנייה אחרונה</span><b class="num">${fmtD(lastBuy(c))}</b></div>
-      <div><span>צפוי להיגמר</span><b class="num">${fmtLong(s.due)}</b></div>
-      <div><span>אישור לתזכורות</span><b>${c.consent.source==='qr'?'נרשם לבד ב-QR':'אישר למוכר'} ב-${fmtD(c.consent.date)}</b></div></div>
-    <div><span class="lbl">ההודעה שתישלח</span><div class="msg" style="margin-top:6px">${esc(buildMsg(c))}</div></div>
-    <div class="row">
-      <a class="btn wa" href="${esc(waLink(c))}" target="_blank" rel="noopener">פתח בוואטסאפ</a>
-      <button class="btn" data-act="copy" data-id="${c.id}">העתקת ההודעה</button>
-      <button class="btn" data-act="sent" data-id="${c.id}">✓ שלחתי</button>
-      <button class="btn primary" data-act="buy" data-id="${c.id}">נמכר שוב</button></div>
-    <div><span class="lbl">היסטוריה</span><ul class="hist" style="margin-top:6px">
-      ${[...c.purchases.map(x=>({d:x.date,t:'קנה '+prod(x.productId).name, v:money(x.price)})), ...c.reminders.map(r=>({d:r.date,t:'נשלחה תזכורת',v:''}))]
-        .sort((a,b)=>a.d<b.d?1:-1).map(h=>`<li><span>${fmtD(h.d)} · ${esc(h.t)}</span><b class="num">${h.v}</b></li>`).join('') || '<li>אין עדיין</li>'}</ul></div>
-    <div id="delRow" class="row"><button class="btn danger" data-act="askdel" data-id="${c.id}">הסרה מהתזכורות</button></div>
-  </div></div>`;
-  $('#dClose').focus();
-}
-const closeDrawer = () => { $('#overlayRoot').innerHTML=''; };
-
-/* ---------- mutations ---------- */
-async function addPurchase(c, pid){
-  const p = prod(pid || c.productId);
-  const {data, error} = await sb.from('purchases').insert({store_id:S.store.id, customer_id:c.id, product_id:p.id, price:p.price}).select('id,date').single();
-  if (error) throw error;
-  c.purchases.push({id:data.id, date:data.date, productId:p.id, price:p.price});
-}
-async function recordBuy(id, pid){
-  const c = S.customers.find(x=>x.id===id); if (!c) return;
-  try {
-    if (pid && pid !== c.productId){ const {error} = await sb.from('customers').update({product_id:pid}).eq('id', c.id); if (error) throw error; c.productId = pid; }
-    await addPurchase(c, c.productId);
-    toast('נרשם. תזכורת הבאה בערך ב'+fmtLong(addDays(status(c).due,-4)));
-  } catch(e){ fail(e, 'המכירה לא נשמרה. בדקו את החיבור ונסו שוב.'); }
-}
-async function markSent(id){
-  const c = S.customers.find(x=>x.id===id); if (!c) return;
-  if (lastRem(c) === today()){ toast('כבר סומן היום'); return; }
-  const {data, error} = await sb.from('reminders').insert({store_id:S.store.id, customer_id:c.id}).select('id,date').single();
-  if (error) return fail(error);
-  c.reminders.push({id:data.id, date:data.date}); toast('סומן שנשלחה תזכורת ל'+c.name.split(' ')[0]);
-}
-async function optOut(id){
-  const {error} = await sb.from('customers').update({opted_out:true}).eq('id', id);
-  if (error) return fail(error);
-  S.customers = S.customers.filter(x=>x.id!==id); toast('הלקוח הוסר מהתזכורות');
-}
-function readProductRows(){
-  return [...document.querySelectorAll('tr[data-pid]')].map(tr => {
-    const o = {id:tr.dataset.pid}; tr.querySelectorAll('[data-f]').forEach(i => o[i.dataset.f] = i.value); return o;
-  });
-}
-async function saveProducts(){
-  const rows = readProductRows();
-  for (const r of rows){
-    const kg = Number(r.kg), price = Number(r.price);
-    if (!r.name.trim() || !(kg>0) || !(price>=0)){ toast('בדקו את השורה "'+(r.name||'ללא שם')+'": חסר שם, משקל או מחיר.'); return false; }
-  }
-  const res = await Promise.all(rows.map(r => sb.from('products').update({name:r.name.trim(), kind:r.kind, kg:Number(r.kg), price:Number(r.price)}).eq('id', r.id)));
-  const bad = res.find(r=>r.error); if (bad){ fail(bad.error); return false; }
-  rows.forEach(r => Object.assign(prod(r.id), {name:r.name.trim(), kind:r.kind, kg:Number(r.kg), price:Number(r.price)}));
-  return true;
-}
-
-/* ---------- video ---------- */
-async function uploadVideo(blob, keepOriginal){
-  const ext = /webm/.test(blob.type) ? 'webm' : /quicktime/.test(blob.type) ? 'mov' : 'mp4';
-  const path = S.store.id+'/'+Date.now()+'.'+ext;
-  const up = await sb.storage.from('store-videos').upload(path, blob, {contentType: blob.type || 'video/mp4', upsert:false});
-  if (up.error) throw up.error;
-  const old = S.store.video_path, oldOrig = S.store.video_orig_path;
-  const patch = keepOriginal ? {video_path:path, video_orig_path: oldOrig || old} : {video_path:path, video_orig_path:null};
-  const {error} = await sb.from('stores').update(patch).eq('id', S.store.id);
-  if (error) throw error;
-  const remove = keepOriginal ? (oldOrig ? [old] : []) : [old, oldOrig].filter(Boolean);
-  if (remove.length) sb.storage.from('store-videos').remove(remove).catch(()=>{});
-  Object.assign(S.store, patch); videoURL = videoPublicUrl(sb, path);
-}
-async function saveVideoFile(file){
-  const err = $('#vidErr'); if (err) err.textContent = '';
-  if (!file) return;
-  if (!file.type.startsWith('video/')){ err.textContent = 'הקובץ הזה לא סרטון. בחרו קובץ MP4 או MOV.'; return; }
-  if (file.size > MAX_VIDEO_MB*1e6){ err.textContent = 'הסרטון גדול מדי ('+Math.round(file.size/1e6)+'MB). עד '+MAX_VIDEO_MB+'MB.'; return; }
-  try { toast('מעלה את הסרטון…'); await uploadVideo(file, false); route(); toast('הסרטון נשמר. אפשר להפעיל עליו עריכה חכמה'); }
-  catch(e){ console.error(e); err.textContent = 'ההעלאה נכשלה: '+(e.message||''); }
-}
-const fmtSec = s => s >= 60 ? Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0') : Math.round(s)+' שניות';
-function trimProgress(label, p, extra=''){
-  const box = $('#trimBox'); if (!box) return;
-  box.hidden = false;
-  box.innerHTML = `<div class="trim-step"><b>${label}</b><span class="num">${Math.round(p*100)}%</span></div>
-    <div class="trim-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p*100)}"><i style="width:${(p*100).toFixed(1)}%"></i></div>${extra}`;
-}
-async function runSmartTrim(){
-  if (trimBusy || !videoURL) return;
-  if (!SmartTrim.supported()){ $('#vidErr').textContent = 'הדפדפן הזה לא יודע ליצור סרטון. נסו בכרום במחשב.'; return; }
-  trimBusy = true; $('#vidErr').textContent = '';
-  let local = null;
-  try {
-    trimProgress('מוריד את הסרטון לעריכה', 0);
-    local = URL.createObjectURL(await (await fetch(videoURL)).blob());
-    const A = 'מנתח את הסרטון: חדות, תאורה ורעידות';
-    const a = await SmartTrim.analyze(local, {target:18, onProgress:p => trimProgress(A, p)});
-    if (a.duration <= 22){ $('#trimBox').innerHTML = `<p class="sub">הסרטון כבר קצר (${fmtSec(a.duration)}), אין מה לחתוך.</p>`; return; }
-    const tl = `<div class="trim-tl" dir="ltr" aria-hidden="true">${a.segments.map(s => `<i style="left:${(s.a/a.duration*100).toFixed(2)}%;width:${((s.b-s.a)/a.duration*100).toFixed(2)}%"></i>`).join('')}</div>
-      <p class="sub">נבחרו ${a.segments.length} קטעים, ${fmtSec(a.kept)} מתוך ${fmtSec(a.duration)}. הקטעים החשוכים, המטושטשים והרועדים ירדו.</p>`;
-    trimBlob = await SmartTrim.render(local, a.segments, {onProgress:p => trimProgress('יוצר את הסרטון הערוך', p, tl)});
-    if (trimURL) URL.revokeObjectURL(trimURL); trimURL = URL.createObjectURL(trimBlob);
-    $('#trimBox').innerHTML = `<div class="trim-step"><b>הגרסה הערוכה מוכנה</b></div>${tl}
-      <video class="vid-prev" id="trimPrev" aria-label="הגרסה הערוכה" controls muted loop playsinline></video>
-      <div class="row"><button class="btn primary" data-act="savetrim">להשתמש בגרסה הערוכה</button><button class="btn" data-act="canceltrim">להשאיר את המקור</button></div>`;
-    attachVideo($('#trimPrev'), trimURL);
-  } catch(e){
-    console.error(e); $('#trimBox').hidden = true; $('#vidErr').textContent = 'העריכה נכשלה: '+(e.message||'שגיאה לא ידועה')+'. אפשר להמשיך עם הסרטון המקורי.';
-  } finally { trimBusy = false; if (local) setTimeout(()=>URL.revokeObjectURL(local), 1000); }
-}
-async function saveTrim(){
-  if (!trimBlob) return;
-  try { toast('שומר את הגרסה הערוכה…'); await uploadVideo(trimBlob, true); trimBlob = null; route(); toast('נשמר. המקור שמור למקרה שתרצו לחזור'); }
-  catch(e){ console.error(e); $('#vidErr').textContent = 'השמירה נכשלה: '+(e.message||''); }
-}
-async function revertOrig(){
-  const orig = S.store.video_orig_path, cur = S.store.video_path; if (!orig) return;
-  const {error} = await sb.from('stores').update({video_path:orig, video_orig_path:null}).eq('id', S.store.id);
-  if (error) return fail(error);
-  sb.storage.from('store-videos').remove([cur]).catch(()=>{});
-  S.store.video_path = orig; S.store.video_orig_path = null; videoURL = videoPublicUrl(sb, orig); route(); toast('חזרנו לסרטון המקורי');
-}
-async function deleteVideo(){
-  const paths = [S.store.video_path, S.store.video_orig_path].filter(Boolean);
-  const {error} = await sb.from('stores').update({video_path:null, video_orig_path:null}).eq('id', S.store.id);
-  if (error) return fail(error);
-  if (paths.length) sb.storage.from('store-videos').remove(paths).catch(()=>{});
-  S.store.video_path = S.store.video_orig_path = null; videoURL = null; route(); toast('הסרטון הוסר');
-}
-
-/* ---------- events ---------- */
-document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-act]'); if (!t || !S) return;
-  const a = t.dataset.act, id = t.dataset.id;
-  if (a==='close'){ if (e.target===t) closeDrawer(); return; }
-  if (a==='open'){ openCustomer(id); return; }
-  if (a==='sent'){ t.disabled = true; await markSent(id); closeDrawer(); route(); return; }
-  if (a==='buy'){
-    t.disabled = true;
-    const sel = document.querySelector(`select[data-act="altprod"][data-id="${id}"]`);
-    await recordBuy(id, sel ? sel.value : null); closeDrawer();
-    if (location.hash==='#sale'){ $('#saleSearch').value=''; saleResults(''); $('#saleSearch').focus(); } else route();
-    return;
-  }
-  if (a==='copy'){ const c = S.customers.find(x=>x.id===id); navigator.clipboard?.writeText(buildMsg(c)).then(()=>toast('ההודעה הועתקה'), ()=>toast('לא הצלחתי להעתיק')); return; }
-  if (a==='copylink'){ navigator.clipboard?.writeText(joinUrl()).then(()=>toast('הקישור הועתק'), ()=>toast('לא הצלחתי להעתיק')); return; }
-  if (a==='askdel'){ $('#delRow').innerHTML = `<span>להסיר את ${esc(S.customers.find(x=>x.id===id).name)} מהתזכורות?</span><button class="btn danger" data-act="del" data-id="${id}">כן, להסיר</button><button class="btn" data-act="nodel" data-id="${id}">ביטול</button>`; return; }
-  if (a==='nodel'){ openCustomer(id); return; }
-  if (a==='del'){ await optOut(id); closeDrawer(); route(); return; }
-  if (a==='newcust'){
-    $('#view').innerHTML = `<section class="panel"><div class="row"><h2>לקוח חדש</h2><span class="spacer"></span><a class="btn" href="#sale">ביטול</a></div><div style="margin-top:12px">${customerFormHTML(t.dataset.phone)}</div></section>`;
-    wireCustomerForm(); $('#fName').focus(); return;
-  }
-  if (a==='addprod'){
-    if (!(await saveProducts())) return;
-    const {data, error} = await sb.from('products').insert({store_id:S.store.id, name:'מוצר חדש', kind:'dog', kg:10, price:100}).select().single();
-    if (error) return fail(error);
-    S.products.push({...data, kg:Number(data.kg), price:Number(data.price)}); route(); return;
-  }
-  if (a==='delprod'){
-    const used = S.customers.some(c=>c.productId===id);
-    const r = used ? await sb.from('products').update({active:false}).eq('id', id) : await sb.from('products').delete().eq('id', id);
-    if (r.error) return fail(r.error);
-    if (used) prod(id).active = false; else S.products = S.products.filter(p=>p.id!==id);
-    toast(used ? 'המוצר הוסתר. לקוחות קיימים ממשיכים לקבל תזכורות עליו' : 'המוצר הוסר'); route(); return;
-  }
-  if (a==='saveprods'){ if (await saveProducts()){ toast('המוצרים נשמרו'); route(); } return; }
-  if (a==='smarttrim'){ runSmartTrim(); return; }
-  if (a==='savetrim'){ t.disabled = true; saveTrim(); return; }
-  if (a==='canceltrim'){ trimBlob = null; $('#trimBox').hidden = true; return; }
-  if (a==='revertvid'){ revertOrig(); return; }
-  if (a==='delvideo'){ deleteVideo(); return; }
-  if (a==='logout'){ await sb.auth.signOut(); return; }
-});
-document.addEventListener('keydown', e => { if (e.key==='Escape' && $('#overlayRoot').innerHTML) closeDrawer(); });
-
-/* ---------- router ---------- */
-const SHELL_VIEWS = ['today','sale','customers','report','setup'];
-function route(){
-  if (!S) return;
-  const h = (location.hash||'#today').slice(1);
-  closeDrawer();
-  if (h==='kiosk'){ renderKiosk(); window.scrollTo(0,0); return; }
-  $('#full').hidden = true; $('#full').innerHTML=''; $('#shell').hidden = false;
-  $('#storeLabel').textContent = S.store.name;
-  const v = SHELL_VIEWS.includes(h) ? h : 'today';
-  document.querySelectorAll('.tabs a').forEach(a => a.getAttribute('href')==='#'+v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
-  $('#view').innerHTML = views[v]();
-  if (v==='sale'){ const i=$('#saleSearch'); i.addEventListener('input', ()=>saleResults(i.value)); saleResults(''); i.focus(); }
-  if (v==='customers'){
-    $('#custFilter').addEventListener('input', e => {
-      const q = e.target.value.trim(), nq = normPhone(q);
-      const rows = S.customers.filter(c => !q || c.name.includes(q) || (c.petName||'').includes(q) || (/\d/.test(q) && c.phone.includes(nq))).map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
-      $('#custList').innerHTML = rows.map(x=>custRow(x.c,'list')).join('') || '<div class="empty">לא נמצא</div>';
-    });
-  }
-  if (v==='setup'){
-    attachVideo($('#vidPrev'), videoURL);
-    $('#vidFile').addEventListener('change', e => saveVideoFile(e.target.files[0]));
-    const z = $('#vidZone');
-    ['dragenter','dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
-    ['dragleave','drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));
-    z.addEventListener('drop', e => saveVideoFile(e.dataTransfer.files[0]));
-    $('#storeForm').addEventListener('submit', async e => {
-      e.preventDefault();
-      const n = $('#sName').value.trim(), w = $('#sWa').value.trim(), tpl = $('#sTpl').value;
-      if (n.length < 2){ $('#storeErr').textContent='חסר שם חנות.'; return; }
-      if (w && !validPhone(w)){ $('#storeErr').textContent='מספר הוואטסאפ צריך להיות נייד ישראלי, 10 ספרות.'; return; }
-      const patch = {name:n, whatsapp: w ? normPhone(w) : null, template:tpl};
-      const {error} = await sb.from('stores').update(patch).eq('id', S.store.id);
-      if (error){ $('#storeErr').textContent = 'השמירה נכשלה: '+error.message; return; }
-      Object.assign(S.store, patch); toast('נשמר'); route();
-    });
-  }
-}
-window.addEventListener('hashchange', route);
-
 /* ---------- boot ---------- */
 let recovering = false, booting = false;
 async function start(){
@@ -665,7 +1701,7 @@ async function boot(){
     if (error) throw error;
     if (!store) return renderOnboarding();
     await loadAll(store);
-    $('#logoSlot').innerHTML = LOGO_SVG;
+    if (!location.hash) location.hash = S.store.autoKiosk ? '#kiosk' : '#today';
     route();
   } catch(e){
     console.error(e);
@@ -678,6 +1714,7 @@ if (sb) sb.auth.onAuthStateChange((ev) => {
   else if (ev==='SIGNED_IN' && !S && !recovering) start();
 });
 start();
+
 </script>
 </body>
 </html>

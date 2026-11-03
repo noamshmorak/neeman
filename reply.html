@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>תשובה לתזכורת</title>
+<meta name="theme-color" content="#0f3a31">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bellefair&family=Heebo:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="core.js"></script>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} .reply-btns{display:grid;gap:10px}</style>
+</head>
+<body>
+<div class="join" id="root"><div class="loading">טוען…</div></div>
+<script>
+const $ = s => document.querySelector(s);
+const sb = makeClient();
+const token = new URLSearchParams(location.search).get('t') || '';
+let info = null;
+function fatal(msg, sub=''){ $('#root').innerHTML = `<div class="panel" style="margin-top:40px;text-align:center"><h2>${msg}</h2>${sub?`<p class="sub">${sub}</p>`:''}</div>`; }
+function done(html){ $('#body').innerHTML = `<div style="display:grid;gap:10px;text-align:center">${html}</div>`; }
+async function act(action, days=0){
+  const {error} = await sb.rpc('reply_action', {p_token: token, p_action: action, p_days_ago: days});
+  if (error){ done('<h2>משהו השתבש</h2><p class="sub">נסו שוב בעוד רגע, או ענו להודעה בוואטסאפ.</p>'); return false; }
+  return true;
+}
+function page(){
+  const what = info.kind === 'litter' ? 'חול' : 'שק';
+  const pet = info.pet_name || PETS[info.pet]?.the || '';
+  $('#root').innerHTML = `
+    <div class="join-head"><span class="eyebrow" style="color:#e2c27f">הודעה מ${esc(info.store)}</span><h1>היי ${esc(info.first_name)}</h1>
+      <p>${info.product ? `${esc(info.product)} ${esc(info.kg)} ק"ג${pet ? ' ל'+esc(pet.replace(/^ה/,'')) : ''}` : ''}</p></div>
+    <div class="panel" id="body"><div class="reply-btns">
+      <button class="btn primary big" id="bYes">כן, אשמח ל${what}</button>
+      <button class="btn big" id="bBought">קניתי כבר</button>
+      <button class="btn big ghost danger" id="bRemove">הסירו אותי מהתזכורות</button>
+    </div></div>`;
+  $('#bYes').onclick = async () => { if (await act('yes')) done(`<h2>מעולה!</h2><p class="sub">${esc(info.store)} קיבלו את הבקשה ויחזרו אליך לתיאום איסוף או משלוח.</p>`); };
+  $('#bBought').onclick = () => {
+    done(`<h2>תודה! מתי קנית?</h2><p class="sub">ככה נדע מתי להזכיר לך בפעם הבאה.</p><div class="reply-btns">${[[0,'היום'],[3,'לפני כמה ימים'],[7,'לפני שבוע'],[14,'לפני שבועיים'],[30,'לפני חודש או יותר']].map(([d,l]) => `<button class="btn" data-d="${d}">${l}</button>`).join('')}</div>`);
+    document.querySelectorAll('[data-d]').forEach(b => b.onclick = async () => { if (await act('bought', Number(b.dataset.d))) done('<h2>עודכן</h2><p class="sub">נזכיר לך שוב כשהשק הבא יתקרב לסוף.</p>'); });
+  };
+  $('#bRemove').onclick = () => {
+    done(`<h2>להסיר אותך מהתזכורות?</h2><div class="reply-btns"><button class="btn danger" id="rOk">כן, להסיר</button><button class="btn" id="rNo">לא, להשאיר</button></div>`);
+    $('#rOk').onclick = async () => { if (await act('remove')) done('<h2>הוסרת</h2><p class="sub">לא נשלח לך יותר תזכורות. רוצה לחזור? ספרו לנו בחנות.</p>'); };
+    $('#rNo').onclick = page;
+  };
+}
+(async () => {
+  if (!sb) return fatal('הדף עוד לא מחובר.');
+  if (!/^[0-9a-f-]{36}$/i.test(token)) return fatal('הקישור לא תקין.');
+  const {data, error} = await sb.rpc('reply_info', {p_token: token});
+  if (error) return fatal('לא הצלחנו לטעון. נסו שוב בעוד רגע.');
+  if (!data) return fatal('הקישור כבר לא פעיל', 'אם ביקשת להסיר את עצמך, ההסרה נקלטה.');
+  info = data; page();
+})();
+</script>
+</body>
+</html>

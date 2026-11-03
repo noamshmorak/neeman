@@ -206,6 +206,11 @@ td input,td select{border:1px solid var(--line);background:var(--surface);border
 .trim-tl i{position:absolute;top:0;bottom:0;background:var(--em-ring);border-inline:1px solid var(--surface)}
 
 /* modal, POS, rules */
+.prod-picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.pick-prod{display:grid;gap:2px;text-align:right;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 14px;cursor:pointer;color:var(--ink)}
+.pick-prod span{color:var(--muted);font-size:.85rem}
+.pick-prod[aria-pressed=true]{background:var(--em);color:var(--on-em);border-color:var(--em);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--brass)}
+.pick-prod[aria-pressed=true] span{color:var(--brass-hi)}
 .pin-dots{display:flex;gap:12px;justify-content:center;margin:6px 0}
 .pin-dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--em);display:block}
 .pin-dots i.on{background:var(--em)}
@@ -1116,10 +1121,13 @@ views.customers = () => {
   </section>`;
 };
 
+let salePid = null;
 views.sale = () => `<section class="panel">
     <h2>רישום מכירה</h2>
-    <p class="sub">סורקים את השק בסורק, או מקלידים טלפון של לקוח. המערכת מזהה את המוצר לבד.</p>
-    <div class="field" style="margin-top:14px"><label for="saleSearch">טלפון, שם או ברקוד</label>
+    <p class="sub">שני צעדים: מה נמכר, ומי הלקוח. יש סורק? סורקים את השק, והמוצר נבחר לבד.</p>
+    <div class="field" style="margin-top:14px"><span class="lbl">1. מה נמכר?</span>
+      <div class="prod-picks">${S.products.map(p => `<button type="button" class="pick-prod" data-act="pickprod" data-pid="${p.id}" aria-pressed="${salePid===p.id}"><b>${esc(p.name)}</b><span class="num">${p.kg} ק"ג · ${money(p.price)}</span></button>`).join('')}</div></div>
+    <div class="field"><label for="saleSearch">2. הטלפון של הלקוח (או השם)</label>
       <input id="saleSearch" class="search num" inputmode="tel" autocomplete="off" placeholder="05X-XXXXXXX"></div>
     <div id="saleResults" class="list"></div>
   </section>`;
@@ -1127,20 +1135,20 @@ views.sale = () => `<section class="panel">
 function saleResults(q){
   const nq = normPhone(q), t = q.trim();
   const box = $('#saleResults'); if (!box) return;
-  if (!t){ box.innerHTML = '<div class="empty">התחל להקליד מספר טלפון</div>'; return; }
+  if (!t){ box.innerHTML = `<div class="empty">${salePid ? 'עכשיו הקלידו את הטלפון של הלקוח' : 'בחרו מה נמכר, והקלידו את הטלפון של הלקוח'}</div>`; return; }
   const hits = S.customers.filter(c => (nq.length>=3 && normPhone(c.phone).includes(nq)) || (!nq && (c.name.includes(t) || (c.petName||'').includes(t))));
   let html = hits.slice(0,5).map(c => {
-    const p = prod(c.productId), s = status(c);
+    const p = prod(salePid || c.productId), s = status(c);
     return `<div class="panel" style="padding:14px">
       <div class="row"><strong style="font-size:1.15rem">${esc(c.name)}</strong><span class="sub num">${prettyPhone(c.phone)}</span><span class="pill st-${s.st}">${ST_LABEL[s.st]}</span></div>
       <p class="sub">${esc(petPhrase(c))} · קנה לאחרונה ${ago(lastBuy(c))}</p>
       <div class="row" style="margin-top:10px">
         <button class="btn primary big" data-act="buy" data-id="${c.id}">נמכר: ${esc(p.name)} ${p.kg} ק"ג (${money(p.price)})</button>
-        <select class="btn" data-id="${c.id}" data-act="altprod" aria-label="מוצר אחר">${optionsFor(c.pet, c.productId)}</select>
+        <select class="btn" data-id="${c.id}" data-act="altprod" aria-label="מוצר אחר">${S.products.map(x => `<option value="${x.id}" ${x.id===p.id?'selected':''}>${esc(x.name)} ${x.kg} ק"ג</option>`).join('')}</select>
       </div></div>`;
   }).join('');
   if (!hits.length) html = `<div class="empty">לקוח לא נמצא.</div>`;
-  html += `<button class="btn big" data-act="newcust" data-phone="${esc(validPhone(q)?q:'')}">+ לקוח חדש${validPhone(q)?' עם המספר '+prettyPhone(q):''}</button>`;
+  html += `<button class="btn big" data-act="newcust" data-pid="${salePid||''}" data-phone="${esc(validPhone(q)?q:'')}">+ לקוח חדש${validPhone(q)?' עם המספר '+prettyPhone(q):''}</button>`;
   box.innerHTML = html;
 }
 function optionsFor(pet, sel){
@@ -1254,6 +1262,7 @@ function renderKiosk(){
       <a class="btn" href="#join">הדגמה: מה הלקוח רואה אחרי הסריקה</a>
       <button class="btn" type="button" data-act="unlock" data-to="#sale">רישום ע״י המוכר</button>
       <button class="btn" type="button" data-act="unlock" data-to="#today">יציאה מהעמדה</button>
+      <button class="btn" type="button" id="fsBtn" ${document.fullscreenElement?'hidden':''}>מסך מלא</button>
     </div>
     <p class="note">${S.store.shareUrl ? 'בהדגמה, הרשמה מטלפון אחר תציג את דף ההרשמה, אבל לא תופיע בטאבלט. בגרסה המלאה היא נכנסת למערכת מיד.' : 'כדי שסריקה מטלפון אחר תפתח את דף ההרשמה: שתפו את הדף בקישור ציבורי, והדביקו את הקישור בהגדרות החנות.'}</p>
   </div></div>`;
@@ -1262,6 +1271,7 @@ function renderKiosk(){
     if (window.QRCode) new QRCode(document.getElementById('qr'), {text:joinUrl, width:300, height:300, colorDark:'#0c3a33', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
     else $('#qr').textContent = 'QR';
   } catch(e){ $('#qr').textContent = 'QR'; }
+  const fb = $('#fsBtn'); if (fb){ if (!document.documentElement.requestFullscreen) fb.hidden = true; fb.onclick = () => document.documentElement.requestFullscreen?.().catch(() => toast('המכשיר לא מאפשר מסך מלא כאן')); }
   try { navigator.wakeLock?.request('screen').catch(()=>{}); } catch(e){}
 }
 
@@ -1404,7 +1414,7 @@ document.addEventListener('click', e => {
   if (a==='buy'){
     const sel = document.querySelector(`select[data-act="altprod"][data-id="${id}"]`);
     recordBuy(id, sel ? sel.value : null); closeDrawer();
-    if (location.hash==='#sale'){ $('#saleSearch').value=''; saleResults(''); $('#saleSearch').focus(); } else route();
+    if (location.hash==='#sale'){ salePid = null; route(); } else route();
     return;
   }
   if (a==='copy'){
@@ -1421,6 +1431,7 @@ document.addEventListener('click', e => {
   if (a==='pettab'){ syncPetPane(); save(); petTab = t.dataset.pet; $('#petPanel').outerHTML = petPanelHTML(); return; }
   if (a==='saverules'){ syncPetPane(); save(); toast('התזכורות של '+PETS[petTab].label+' נשמרו'); $('#petPanel').outerHTML = petPanelHTML(); return; }
   if (a==='addrule' && t.dataset.pet){ syncPetPane(); S.rules.push({id:'r'+uid(), name:'תזכורת חדשה', pets:[t.dataset.pet], every:30, template:'היי {שם}, כאן {חנות}.\n\n(להפסקת תזכורות השב/י "הסר")'}); save(); $('#petPanel').outerHTML = petPanelHTML(); const cs = document.querySelectorAll('#petPanel .rule'); cs[cs.length-1]?.querySelector('input')?.focus(); return; }
+  if (a==='pickprod'){ salePid = salePid===t.dataset.pid ? null : t.dataset.pid; document.querySelectorAll('.pick-prod').forEach(b => b.setAttribute('aria-pressed', b.dataset.pid===salePid)); saleResults($('#saleSearch').value); $('#saleSearch').focus(); return; }
   if (handleExtraAct(a, t, e)) return;
   if (handleReplyAct(a, t)) return;
   if (a==='setdays'){ const c = S.customers.find(x=>x.id===id), v = Number($('#dDays').value); if (!(v>=3)){ toast('מספר ימים לא תקין'); return; } c.daysOverride = v === prod(c.productId).days ? null : v; save(); openCustomer(id); toast('עודכן. התזכורת הבאה ב'+fmtLong(addDays(status(c).due,-4))); return; }
@@ -1542,6 +1553,7 @@ setInterval(() => {
   }
 }, 1000);
 
+document.addEventListener('fullscreenchange', () => { const fb = document.getElementById('fsBtn'); if (fb) fb.hidden = !!document.fullscreenElement; });
 window.addEventListener('hashchange', route);
 route();
 loadVideo().then(() => { if (videoURL && ['#kiosk','#join','#setup'].includes(location.hash)) route(); });
