@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>תזכורות לפני שהאוכל נגמר</title>
+<meta name="theme-color" content="#0f3a31">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bellefair&family=Heebo:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="core.js"></script>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} [hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="join" id="root"><div class="loading">טוען…</div></div>
+<script>
+const $ = s => document.querySelector(s);
+const sb = makeClient();
+const slug = (new URLSearchParams(location.search).get('s') || '').toLowerCase();
+let store = null;
+
+function optionsFor(pet){
+  return store.products.filter(p => kindsFor(pet).includes(p.kind)).map(p => `<option value="${p.id}">${esc(p.name)} ${p.kg} ק"ג</option>`).join('');
+}
+function page(){
+  const vid = videoPublicUrl(sb, store.video_path);
+  const pets = Object.entries(PETS).filter(([k]) => store.products.some(p => kindsFor(k).includes(p.kind)))
+    .map(([k,v],i)=>`<input type="radio" name="pet" id="pet-${k}" value="${k}" ${i===0?'checked':''}><label for="pet-${k}">${v.label}</label>`).join('');
+  const first = (store.products.find(p => p.kind!=='litter') || store.products[0] || {}).kind || 'dog';
+  document.title = store.name + ' – תזכורות';
+  $('#root').innerHTML = `
+    <div class="join-head">${vid?'<video class="j-video" aria-label="סרטון מהחנות"></video>':''}<span class="eyebrow" style="color:#e2c27f">שירות תזכורות אישי</span>
+      <h1>${esc(store.name)}</h1><p>נזכיר לך בוואטסאפ כמה ימים לפני שהאוכל נגמר. בלי ספאם, ואפשר להסיר בכל רגע.</p></div>
+    <div class="panel" id="body">
+      <form class="form" id="f" novalidate>
+        <div class="grid2">
+          <div class="field"><label for="fName">השם שלך</label><input id="fName" autocomplete="name" required maxlength="60"></div>
+          <div class="field"><label for="fPhone">טלפון נייד</label><input id="fPhone" class="num" inputmode="tel" autocomplete="tel" placeholder="05X-XXXXXXX" required></div></div>
+        <div class="field"><span class="lbl" id="petLbl">מי אוכל?</span><div class="chips" role="radiogroup" aria-labelledby="petLbl">${pets}</div></div>
+        <div class="grid2">
+          <div class="field"><label for="fPetName">שם החיה (לא חובה)</label><input id="fPetName" maxlength="40"></div>
+          <div class="field"><label for="fSize" id="sizeLbl"></label><input id="fSize" type="number" min="1" step="1" class="num"></div></div>
+        <div class="field"><label for="fProd">איזה מוצר?</label><select id="fProd"></select></div>
+        <label class="check"><input type="checkbox" id="fNow" checked><span>קניתי את זה עכשיו</span></label>
+        <label class="check"><input type="checkbox" id="fConsent"><span>אני מאשר/ת לקבל מ${esc(store.name)} תזכורות והצעות בוואטסאפ. אפשר להסיר בכל עת.</span></label>
+        <div class="err" id="err" role="alert"></div>
+        <button class="btn primary big" type="submit">הירשמו לתזכורות</button>
+      </form></div>`;
+  if (vid){ const v = $('.j-video'); v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.src = vid; v.play().catch(()=>{}); }
+  const setPet = k => { $('#sizeLbl').textContent = PETS[k].size; $('#fSize').value = PETS[k].def; $('#fProd').innerHTML = optionsFor(k); };
+  const firstPet = document.querySelector('input[name=pet]:checked')?.value || first;
+  setPet(firstPet);
+  $('#f').addEventListener('change', e => { if (e.target.name==='pet') setPet(e.target.value); });
+  $('#f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const err = $('#err'); err.textContent = '';
+    const name = $('#fName').value.trim(), phone = normPhone($('#fPhone').value), pet = document.querySelector('input[name=pet]:checked')?.value, pid = $('#fProd').value;
+    if (!name){ err.textContent = 'חסר שם.'; $('#fName').focus(); return; }
+    if (!validPhone(phone)){ err.textContent = 'מספר הטלפון צריך להיות נייד ישראלי, 10 ספרות שמתחילות ב-05.'; $('#fPhone').focus(); return; }
+    if (!pid){ err.textContent = 'בחרו מוצר.'; return; }
+    if (!$('#fConsent').checked){ err.textContent = 'כדי לקבל תזכורות צריך לסמן אישור.'; return; }
+    const btn = e.submitter; if (btn) btn.disabled = true;
+    const size = Number($('#fSize').value) || PETS[pet].def;
+    const {data, error} = await sb.rpc('join_store', {p_slug:slug, p_name:name, p_phone:phone, p_pet:pet, p_pet_name:$('#fPetName').value.trim(),
+      p_size:size, p_product:pid, p_bought_now:$('#fNow').checked, p_consent:true});
+    if (btn) btn.disabled = false;
+    if (error){ err.textContent = /too many/.test(error.message) ? 'יש עומס כרגע. נסו שוב בעוד כמה דקות.' : 'ההרשמה לא הצליחה. נסו שוב או בקשו עזרה מהמוכר.'; return; }
+    const days = baseDays({size, count:1}, {kind:data.kind, kg:Number(data.kg)});
+    const when = $('#fNow').checked ? `לפי החישוב, השק אמור להיגמר בערך ב${fmtLong(addDays(today(), days))}. נשלח לך תזכורת כמה ימים לפני.` : 'נשלח לך תזכורת כמה ימים לפני שהשק הבא נגמר.';
+    $('#body').innerHTML = `<div style="display:grid;gap:12px;text-align:center"><h2 style="font-size:1.8rem">נרשמת, ${esc(name.split(' ')[0])}!</h2><p class="sub">${when}</p><p class="sub">ההודעות יגיעו מהוואטסאפ של ${esc(store.name)}. כדי להפסיק, פשוט עונים "הסר".</p></div>`;
+  });
+}
+function fatal(msg){ $('#root').innerHTML = `<div class="panel" style="margin-top:40px;text-align:center"><h2>${msg}</h2></div>`; }
+(async () => {
+  if (!sb) return fatal('הדף עוד לא מחובר.');
+  if (!slug) return fatal('הקישור חסר. סרקו שוב את הקוד בחנות.');
+  const {data, error} = await sb.rpc('public_store', {p_slug: slug});
+  if (error) return fatal('לא הצלחנו לטעון. נסו שוב בעוד רגע.');
+  if (!data) return fatal('החנות לא נמצאה. סרקו שוב את הקוד בחנות.');
+  store = {...data, products: data.products.map(p => ({...p, kg:Number(p.kg)}))};
+  if (!store.products.length) return fatal('החנות עוד לא הגדירה מוצרים.');
+  page();
+})();
+</script>
+</body>
+</html>
