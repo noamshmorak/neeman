@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>נאמן ספקים</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+/* Layout: a store-counter tool. Sticky tab strip, one working column (max 980px), records as ledger rows/cards. */
+:root{
+  --bg:#f3f5f2; --surface:#ffffff; --sunk:#e8ece7; --line:#d5dbd3;
+  --ink:#17201c; --muted:#5d6b64; --accent:#0d5f4f; --accent-ink:#ffffff; --accent-soft:#d8ebe5;
+  --good:#1d7a3e; --good-soft:#dcf0e2; --warn:#7a5c00; --warn-soft:#fbf0c2; --bad:#b3261e; --bad-soft:#f8dedb; --info:#2a5aa8; --info-soft:#dfe8f7;
+  --f-body:"IBM Plex Sans Hebrew",system-ui,"Segoe UI",Arial,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111614; --surface:#1a211e; --sunk:#151b18; --line:#2c3833; --ink:#e7eee9; --muted:#9aaba3; --accent:#4fbfa3; --accent-ink:#06231c; --accent-soft:#183a32;
+  --good:#6fd08f; --good-soft:#163222; --warn:#efcd5c; --warn-soft:#352d10; --bad:#ff8a80; --bad-soft:#3d1a18; --info:#8fb4f0; --info-soft:#1a2740; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111614; --surface:#1a211e; --sunk:#151b18; --line:#2c3833; --ink:#e7eee9; --muted:#9aaba3; --accent:#4fbfa3; --accent-ink:#06231c; --accent-soft:#183a32;
+  --good:#6fd08f; --good-soft:#163222; --warn:#efcd5c; --warn-soft:#352d10; --bad:#ff8a80; --bad-soft:#3d1a18; --info:#8fb4f0; --info-soft:#1a2740; color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+#app{direction:rtl}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;padding-block:12px 4px}
+.brand b{font-size:20px;letter-spacing:-.01em;white-space:nowrap}
+.brand span{color:var(--muted);font-size:13px}
+nav.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:0}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs a{flex:none;padding:10px 12px;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs a.on{color:var(--ink);border-color:var(--accent)}
+nav.tabs .badge{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:4px;border-radius:10px;background:var(--bad);color:#fff;font-size:12px;text-align:center;font-family:var(--f-num)}
+main{padding-block:18px 60px;display:flex;flex-direction:column;gap:18px}
+h2{font-size:19px;margin:0;text-wrap:balance}
+h3{font-size:16px;margin:0}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.between{justify-content:space-between}
+.stack{display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;border-radius:8px;font:inherit;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--accent);padding-inline:6px}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,nav.tabs a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.fld input,label.fld select,label.fld textarea{width:100%}
+label.fld{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 9px;min-width:0}
+input[type=number]{font-family:var(--f-num)}
+textarea{min-height:80px;resize:vertical}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:8px 14px;font:inherit;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--info-soft);color:var(--info)} .pill.neutral{background:var(--sunk);color:var(--muted)}
+.pill.demo{background:var(--sunk);color:var(--muted);font-weight:500}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:22px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;background:var(--sunk)}
+.drop.over{border-color:var(--accent)}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{position:relative;width:78px;height:96px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);text-align:center}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb button{position:absolute;top:2px;left:2px;border:0;background:var(--surface);color:var(--bad);border-radius:50%;width:22px;height:22px;cursor:pointer;line-height:1}
+.alert{display:grid;grid-template-columns:6px 1fr;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.alert .sv{background:var(--muted)} .alert.bad .sv{background:var(--bad)} .alert.warn .sv{background:var(--warn)} .alert.info .sv{background:var(--info)} .alert.good .sv{background:var(--good)}
+.alert .bd{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.li{display:grid;grid-template-columns:minmax(0,2.2fr) repeat(4,minmax(70px,1fr)) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.li:first-child{border-top:0}
+.li.head{background:var(--sunk);font-size:12px;color:var(--muted);font-weight:600}
+.li .nm{min-width:0}
+.li .nm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li.click{cursor:pointer} .li.click:hover{background:var(--sunk)}
+@media (max-width:640px){
+  .li{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+  .li.head{display:none}
+  .li .c{grid-column:1/-1;display:flex;gap:6px;font-size:13px}
+  .li .c::before{content:attr(data-l);color:var(--muted)}
+}
+.line{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:10px}
+.line.free{background:var(--good-soft)}
+.line .lg{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(92px,1fr))}
+.line .lg input{width:100%}
+.calc{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;padding-top:8px;border-top:1px dashed var(--line)}
+.calc b{font-family:var(--f-num)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:start;white-space:nowrap}
+th{background:var(--sunk);font-size:12px;color:var(--muted)}
+td.best{background:var(--good-soft);color:var(--good);font-weight:600}
+.kpis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.kpi .v{font-family:var(--f-num);font-size:22px;font-weight:600}
+.kpi .k{font-size:13px;color:var(--muted)}
+.note{background:var(--info-soft);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:14px}
+.warnbox{background:var(--warn-soft);border-radius:8px;padding:10px 12px;font-size:14px}
+.badbox{background:var(--bad-soft);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:14px}
+.warnbox summary{color:var(--warn)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:max(24px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 24px max(12px,env(safe-area-inset-left,0px))}
+.modal{background:var(--surface);border-radius:12px;width:min(640px,100%);padding:18px;display:flex;flex-direction:column;gap:14px;direction:rtl}
+.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-size:14px}
+.spin{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+details summary{cursor:pointer;color:var(--accent);font-weight:500}
+</style>
+</head><body>
+
+<div id="app" dir="rtl" lang="he">
+  <header class="top">
+    <div class="wrap">
+      <div class="brand"><b>נאמן ספקים</b><span id="status">טוען…</span></div>
+      <nav class="tabs" id="tabs">
+        <a href="#inbox" data-v="inbox">קליטת חשבונית</a>
+        <a href="#alerts" data-v="alerts">התראות<span class="badge" id="badge" hidden></span></a>
+        <a href="#products" data-v="products">מוצרים</a>
+        <a href="#quotes" data-v="quotes">הצעות מחיר</a>
+        <a href="#compare" data-v="compare">מוצרים דומים</a>
+        <a href="#suppliers" data-v="suppliers">ספקים</a>
+        <a href="#invoices" data-v="invoices">חשבוניות</a>
+        <a href="#setup" data-v="setup">הגדרות</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap" id="view"></main>
+</div>
+<input type="file" id="fCam" accept="image/*" capture="environment" hidden>
+<input type="file" id="fImg" accept="image/*,application/pdf" multiple hidden>
+<input type="file" id="fXls" accept=".xlsx,.xls,.csv" hidden>
+<input type="file" id="fPos" accept=".xlsx,.xls,.csv" hidden>
+
+<script>
+"use strict";
+/* Local mode: replaces Claude's db / sample / downloads with this computer's browser storage and the Anthropic API */
+(function(){
+  const DBKEY="neeman-suppliers-db-v1", APIKEY="neeman-api-key", MODELKEY="neeman-model";
+  const DEMO={"settings/main": {"vat": 18, "margin": 30, "rounding": "90", "alertPct": 1, "cheaperPct": 2}, "suppliers/s-demo-a": {"demo": true, "name": "מתוקי השרון (דוגמה)", "taxId": "515000001", "rebatePct": 0, "templateNotes": "ברקוד בעמודה השנייה מימין, מק\"ט בעמודה הראשונה.\nבונוס מופיע בעמודה נפרדת \"בונוס\" באותה שורה.\nהמחירים לפני מע\"מ.", "lastDoc": "2026-10-20"}, "suppliers/s-demo-b": {"demo": true, "name": "סוכר וחבריו (דוגמה)", "taxId": "515000002", "rebatePct": 0, "templateNotes": "חשבונית ממוחשבת, ברקוד מתחת לשם הפריט.\nאין בונוסים בחשבונית, המחירים לפני מע\"מ.", "lastDoc": "2026-11-04"}, "suppliers/s-demo-c": {"demo": true, "name": "הפצות גלבוע (דוגמה)", "taxId": "515000003", "rebatePct": 0, "templateNotes": "מחיר לקרטון, מספר יחידות בקרטון בעמודה \"אריזה\".\nהנחה כללית של 3% בתחתית החשבונית, אחרי מע\"מ.", "corrections": ["\"מים מינרליים 1.5 ל' שישייה\": יח' באריזה נקרא 1 ותוקן ל-6"], "lastDoc": "2026-11-03"}, "products/7290000000011": {"demo": true, "name": "סוכריית טופי 20 גר'", "barcode": "7290000000011", "sellPrice": 2.9, "targetMargin": null, "aliases": {"s-demo-a": ["סוכריית טופי 20 גר"], "s-demo-b": ["טופי 20 גר"]}, "packs": {"s-demo-a": 1, "s-demo-b": 1}}, "products/7290000000028": {"demo": true, "name": "שוקולד חלב 100 גר'", "barcode": "7290000000028", "sellPrice": 8.9, "targetMargin": null, "aliases": {"s-demo-a": ["שוקולד חלב 100 גר"], "s-demo-b": ["שוקולד חלב 100"]}, "packs": {"s-demo-a": 1, "s-demo-b": 1}, "group": "שוקולד חלב", "brand": "חלבית (דוגמה)"}, "products/7290000000035": {"demo": true, "name": "חטיף תירס 80 גר'", "barcode": "7290000000035", "sellPrice": 5.9, "targetMargin": null, "aliases": {"s-demo-c": ["חטיף תירס 80 גר"]}, "packs": {"s-demo-c": 1}}, "products/7290000000042": {"demo": true, "name": "מים מינרליים 1.5 ל'", "barcode": "7290000000042", "sellPrice": 4.5, "targetMargin": null, "aliases": {"s-demo-c": ["מים מינרליים 1 5 ל שישייה"]}, "packs": {"s-demo-c": 6}}, "products/7290000000059": {"demo": true, "name": "קפה נמס 200 גר'", "barcode": "7290000000059", "sellPrice": null, "targetMargin": null, "aliases": {"s-demo-b": ["קפה נמס 200 גר"]}, "packs": {"s-demo-b": 1}}, "products/7290000000066": {"demo": true, "name": "שוקולד חלב קקאו-לנד 80 גר'", "barcode": "7290000000066", "sellPrice": 7.9, "targetMargin": null, "group": "שוקולד חלב", "brand": "קקאו-לנד (דוגמה)", "aliases": {"s-demo-c": ["שוקולד חלב קקאו לנד 80 גר"]}, "packs": {"s-demo-c": 1}}, "purchases/demo-inv-a1": {"demo": true, "supplierId": "s-demo-a", "docNo": "40211", "date": "2026-10-20", "pricesIncludeVat": false, "docDiscount": {"type": "none", "value": 0, "onVat": "before"}, "docDiscPct": 0, "totalExVat": 138, "totalWithVat": 162.84, "createdAt": 1792500000000, "source": "ai", "lines": [{"pid": "7290000000011", "barcode": "7290000000011", "name": "סוכריית טופי 20 גר", "qty": 10, "freeQty": 20, "packSize": 1, "unitPrice": 3, "lineDiscountPct": 0, "lineTotal": 30, "eff": 1}, {"pid": "7290000000028", "barcode": "7290000000028", "name": "שוקולד חלב 100 גר", "qty": 24, "freeQty": 0, "packSize": 1, "unitPrice": 4.5, "lineDiscountPct": 0, "lineTotal": 108, "eff": 4.5}]}, "purchases/demo-inv-b1": {"demo": true, "supplierId": "s-demo-b", "docNo": "A-7781", "date": "2026-11-02", "pricesIncludeVat": false, "docDiscount": {"type": "none", "value": 0, "onVat": "before"}, "docDiscPct": 0, "totalExVat": 60, "totalWithVat": 70.8, "createdAt": 1793500000000, "source": "ai", "lines": [{"pid": "7290000000011", "barcode": "7290000000011", "name": "טופי 20 גר", "qty": 30, "freeQty": 0, "packSize": 1, "unitPrice": 2, "lineDiscountPct": 0, "lineTotal": 60, "eff": 2}]}, "purchases/demo-inv-c1": {"demo": true, "supplierId": "s-demo-c", "docNo": "118803", "date": "2026-10-15", "pricesIncludeVat": false, "docDiscount": {"type": "pct", "value": 3, "onVat": "after"}, "docDiscPct": 3, "totalExVat": 298.76, "totalWithVat": 352.54, "createdAt": 1792100000000, "source": "ai", "lines": [{"pid": "7290000000035", "barcode": "7290000000035", "name": "חטיף תירס 80 גר", "qty": 40, "freeQty": 0, "packSize": 1, "unitPrice": 3.2, "lineDiscountPct": 0, "lineTotal": 128, "eff": 3.104}, {"pid": "7290000000042", "barcode": "7290000000042", "name": "מים מינרליים 1.5 ל' שישייה", "qty": 10, "freeQty": 0, "packSize": 6, "unitPrice": 18, "lineDiscountPct": 0, "lineTotal": 180, "eff": 2.91}]}, "purchases/demo-inv-c2": {"demo": true, "supplierId": "s-demo-c", "docNo": "119420", "date": "2026-11-03", "pricesIncludeVat": false, "docDiscount": {"type": "pct", "value": 3, "onVat": "after"}, "docDiscPct": 3, "totalExVat": 389.55, "totalWithVat": 459.67, "createdAt": 1793600000000, "source": "ai", "lines": [{"pid": "7290000000035", "barcode": "7290000000035", "name": "חטיף תירס 80 גר", "qty": 40, "freeQty": 0, "packSize": 1, "unitPrice": 3.5, "lineDiscountPct": 0, "lineTotal": 140, "eff": 3.395}, {"pid": "7290000000042", "barcode": "7290000000042", "name": "מים מינרליים 1.5 ל' שישייה", "qty": 10, "freeQty": 0, "packSize": 6, "unitPrice": 18, "lineDiscountPct": 0, "lineTotal": 180, "eff": 2.91}, {"pid": "7290000000066", "barcode": "7290000000066", "name": "שוקולד חלב קקאו-לנד 80 גר", "qty": 24, "freeQty": 0, "packSize": 1, "unitPrice": 3.4, "lineDiscountPct": 0, "lineTotal": 81.6, "eff": 3.298}]}, "quotes/demo-q-b1": {"demo": true, "supplierId": "s-demo-b", "docNo": "הצ-311", "date": "2026-11-04", "validUntil": "2026-12-04", "pricesIncludeVat": false, "docDiscount": {"type": "none", "value": 0, "onVat": "before"}, "docDiscPct": 0, "totalExVat": 132, "totalWithVat": 155.76, "createdAt": 1793700000000, "source": "ai", "lines": [{"pid": "7290000000028", "barcode": "7290000000028", "name": "שוקולד חלב 100", "qty": 12, "freeQty": 1, "packSize": 1, "unitPrice": 4, "lineDiscountPct": 0, "lineTotal": 48, "eff": 3.6923}, {"pid": "7290000000059", "barcode": "7290000000059", "name": "קפה נמס 200 גר", "qty": 6, "freeQty": 0, "packSize": 1, "unitPrice": 14, "lineDiscountPct": 0, "lineTotal": 84, "eff": 14}]}};
+  let store={};
+  try{ const raw=localStorage.getItem(DBKEY); store=raw?JSON.parse(raw):JSON.parse(JSON.stringify(DEMO)); if(!raw) localStorage.setItem(DBKEY,JSON.stringify(store)); }catch(e){ store=JSON.parse(JSON.stringify(DEMO)); }
+  const subs=new Set();
+  function persist(){ try{ localStorage.setItem(DBKEY,JSON.stringify(store)); }catch(e){ alertFull(); } }
+  function alertFull(){ const t=document.createElement("div"); t.className="toast"; t.textContent="הזיכרון של הדפדפן מלא. גבה את הנתונים בלשונית הגדרות."; document.body.append(t); setTimeout(()=>t.remove(),5000); }
+  const snapDoc=(path)=>{ const d=store[path]; return {id:path.split("/").pop(),exists:!!d,data:()=>d?JSON.parse(JSON.stringify(d)):undefined,metadata:{fromCache:false,hasPendingWrites:false}}; };
+  const snapCol=(name)=>{ const docs=Object.keys(store).filter(p=>p.startsWith(name+"/")&&p.split("/").length===2).map(snapDoc); return {docs,size:docs.length,empty:!docs.length,docChanges:()=>[],metadata:{fromCache:false,hasPendingWrites:false}}; };
+  function emit(){ for(const s of subs) try{ s.fn(s.kind==="doc"?snapDoc(s.path):snapCol(s.path)); }catch(e){ console.error(e); } }
+  function sub(kind,path,fn){ const s={kind,path,fn}; subs.add(s); setTimeout(()=>fn(kind==="doc"?snapDoc(path):snapCol(path)),0); return ()=>subs.delete(s); }
+  const db={
+    doc(path){ return { path, get:async()=>snapDoc(path), set:async(data)=>{ store[path]=JSON.parse(JSON.stringify(data)); persist(); emit(); }, update:async(data)=>{ store[path]={...(store[path]||{}),...data}; persist(); emit(); }, delete:async()=>{ delete store[path]; persist(); emit(); }, onSnapshot:(fn)=>sub("doc",path,fn) }; },
+    collection(name){ return { path:name, onSnapshot:(fn)=>sub("col",name,fn), get:async()=>snapCol(name) }; }
+  };
+  async function toB64(blob){
+    const bmp=await createImageBitmap(blob); const max=1800; const sc=Math.min(1,max/Math.max(bmp.width,bmp.height));
+    const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+    const url=c.toDataURL("image/jpeg",0.85); return url.split(",")[1];
+  }
+  function parseJson(t){ try{return JSON.parse(t);}catch(e){} const m=t.match(/```(?:json)?\s*([\s\S]*?)```/); if(m){try{return JSON.parse(m[1]);}catch(e){}} const a=t.indexOf("{"), b=t.lastIndexOf("}"); if(a>=0&&b>a){try{return JSON.parse(t.slice(a,b+1));}catch(e){}} throw {code:"invalid_json",message:"bad json",text:t}; }
+  const getKey=()=>{ try{return localStorage.getItem(APIKEY)||"";}catch(e){return "";} };
+  const getModel=()=>{ try{ let m=localStorage.getItem(MODELKEY)||"claude-sonnet-5-5"; if(/sonnet-4/.test(m)){ m="claude-sonnet-5-5"; localStorage.setItem(MODELKEY,m);} return m;}catch(e){return "claude-sonnet-5-5";} };
+  const sample={
+    limits:async()=>({maxPromptBytes:262144,images:{maxCount:10,maxInputBytes:20e6,mediaTypes:["image/jpeg","image/png","image/webp"]}}),
+    json:async(prompt,opts={})=>{
+      const key=getKey(); if(!key) throw {code:"no_key",message:"no key"};
+      const content=[]; for(const im of (opts.images||[])) content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:await toB64(im)}});
+      content.push({type:"text",text:prompt+"\n\nReply with the JSON only."});
+      let r;
+      try{ r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:opts.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:getModel(),max_tokens:12000,messages:[{role:"user",content}]})}); }
+      catch(e){ if(e.name==="AbortError") throw {code:"cancelled",message:"cancelled"}; throw {code:"network",message:String(e)}; }
+      if(!r.ok){ const txt=await r.text().catch(()=> ""); throw {code:r.status===401?"bad_key":r.status===429?"rate_limited":r.status===404||/model/i.test(txt)&&r.status===400?"bad_model":"upstream_error",message:txt}; }
+      const j=await r.json(); const t=(j.content||[]).filter(c=>c.type==="text").map(c=>c.text).join("");
+      return parseJson(t);
+    }
+  };
+  const downloads={ save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000); return {status:"saved"}; } };
+  window.claude={ use:async(name)=>({db,sample,downloads}[name]||null) };
+  window.LOCAL={
+    panel(){ const k=getKey(); return `<div class="panel"><h3>קריאת צילומים ו-PDF</h3>
+      <p class="muted">הקובץ עובד בלי Claude. כדי שהמערכת תקרא צילומי חשבוניות צריך מפתח API של Anthropic (נפתח ב-platform.claude.com, משלמים לפי שימוש, בערך 20 אגורות לחשבונית מצולמת עם Sonnet). אקסל והקלדה ידנית עובדים גם בלי מפתח.</p>
+      <div class="grid"><label class="fld">מפתח API<input id="lKey" type="password" placeholder="sk-ant-..." value="${k?"••••••••"+k.slice(-4):""}"></label><label class="fld">מודל<select id="lModel"><option value="claude-sonnet-5-5" ${getModel()==="claude-sonnet-5-5"?"selected":""}>Sonnet 5.5 (מדויק, מומלץ)</option><option value="claude-haiku-5-5" ${getModel()==="claude-haiku-5-5"?"selected":""}>Haiku 5.5 (זול ומהיר)</option></select></label></div>
+      <div class="row"><button class="btn primary" data-act="lsavekey">שמור</button>${k?`<button class="btn" data-act="ltestkey">בדוק חיבור</button>`:""}${k?`<button class="btn ghost danger" data-act="lclearkey">מחק מפתח</button>`:""}<span class="small muted">המפתח נשמר רק במחשב הזה.</span></div></div>
+      <div class="panel"><h3>גיבוי</h3><p class="muted">כל הנתונים נשמרים בדפדפן של המחשב הזה. מומלץ לגבות פעם בשבוע, ובקובץ הגיבוי אפשר גם להעביר את הנתונים למחשב אחר.</p>
+      <div class="row"><button class="btn" data-act="lbackup">הורד גיבוי</button><button class="btn" data-act="lrestore">שחזר מגיבוי</button></div></div>`; }
+  };
+  const fin=document.createElement("input"); fin.type="file"; fin.accept=".json"; fin.hidden=true;
+  fin.onchange=async()=>{ const f=fin.files[0]; fin.value=""; if(!f) return; try{ const d=JSON.parse(await f.text()); if(typeof d!=="object"||!d) throw 0; store=d; persist(); emit(); toastL("הנתונים שוחזרו"); }catch(e){ toastL("קובץ הגיבוי לא תקין"); } };
+  document.addEventListener("DOMContentLoaded",()=>document.body.append(fin));
+  function toastL(m){ const t=document.createElement("div"); t.className="toast"; t.textContent=m; document.body.append(t); setTimeout(()=>t.remove(),2800); }
+  document.addEventListener("click",e=>{
+    const b=e.target.closest("[data-act]"); if(!b) return; const a=b.dataset.act;
+    if(a==="lsavekey"){ const v=document.getElementById("lKey").value.trim(); try{ if(v&&!v.startsWith("••")) localStorage.setItem(APIKEY,v); localStorage.setItem(MODELKEY,document.getElementById("lModel").value||"claude-sonnet-5-5"); }catch(err){} toastL("נשמר"); setTimeout(()=>location.reload(),600); }
+    if(a==="ltestkey"){ b.disabled=true; b.textContent="בודק…"; sample.json('Reply with only this JSON: {"ok":true}').then(r=>{ toastL(r&&r.ok?"החיבור עובד. אפשר לקרוא צילומים.":"התקבלה תשובה לא צפויה"); }).catch(e=>{ toastL(e.code==="bad_key"?"המפתח לא תקין":e.code==="bad_model"?"שם המודל לא מוכר":e.code==="network"?"אין חיבור לאינטרנט":e.code==="rate_limited"?"אין יתרה בחשבון או יותר מדי בקשות":"שגיאה: "+(e.message||e.code).slice(0,120)); }).finally(()=>{ b.disabled=false; b.textContent="בדוק חיבור"; }); }
+    if(a==="lclearkey"){ try{localStorage.removeItem(APIKEY);}catch(err){} toastL("המפתח נמחק"); location.reload(); }
+    if(a==="lbackup"){ downloads.save({filename:"גיבוי-ספקים-"+new Date().toISOString().slice(0,10)+".json",data:new Blob([JSON.stringify(store)],{type:"application/json"})}); }
+    if(a==="lrestore"){ fin.click(); }
+  });
+})();
+</script>
+<script>
+"use strict";
+document.documentElement.lang = "he";
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const n = v => { const x = parseFloat(String(v ?? "").replace(/[,₪\s]/g, "")); return isFinite(x) ? x : 0; };
+const nn = v => { if (v === null || v === undefined || v === "") return null; const x = n(v); return isFinite(x) ? x : null; };
+const money = (v, d = 2) => v == null || !isFinite(v) ? "—" : "₪" + v.toLocaleString("he-IL", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (v, d = 1) => v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d) + "%";
+const today = () => new Date().toISOString().slice(0, 10);
+const norm = s => String(s || "").replace(/["'״׳\-\.\,\(\)]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const cleanBarcode = b => { const d = String(b ?? "").replace(/\D/g, ""); return d.length >= 7 && d.length <= 14 ? d : ""; };
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 2800); }
+const fmtDate = d => d ? d.split("-").reverse().join("/") : "—";
+
+/* ---------- state ---------- */
+const DEF = { vat: 18, margin: 30, rounding: "90", alertPct: 1, cheaperPct: 2 };
+const S = { settings: { ...DEF }, suppliers: {}, products: {}, purchases: [], quotes: [], changes: [], ready: false };
+let IDX = {};
+let db = null, sample = null, downloads = null;
+let view = "inbox";
+let draft = null;          // inbox working state
+let posMap = null;         // POS import working state
+
+/* ---------- money logic ---------- */
+const vatF = () => 1 + (n(S.settings.vat) || 0) / 100;
+function roundPrice(x) {
+  const r = S.settings.rounding;
+  if (!isFinite(x) || x <= 0) return null;
+  if (r === "90") { const f = Math.floor(x); let c = f + 0.9; if (c < x - 1e-9) c = f + 1.9; return +c.toFixed(2); }
+  if (r === "int") return Math.ceil(x - 1e-9);
+  if (r === "10ag") return Math.ceil(x * 10 - 1e-9) / 10;
+  return +x.toFixed(2);
+}
+/* doc discount as percent of the pre-VAT total */
+function docDiscPct(doc, grossExVat) {
+  const d = doc.docDiscount || {};
+  if (!d.type || d.type === "none" || !n(d.value)) return 0;
+  if (d.type === "pct") return n(d.value);
+  const base = d.onVat === "after" ? grossExVat * vatF() : grossExVat;
+  return base > 0 ? (n(d.value) / base) * 100 : 0;
+}
+/* compute effective per-unit cost (ex VAT) for all lines of a document. Bonus lines of the same product share the cost. */
+function computeDoc(doc, sup) {
+  const vf = vatF();
+  const rebate = n(sup?.rebatePct) / 100;
+  let grossAll = 0;
+  const L = doc.lines.map(l => {
+    let price = n(l.unitPrice); if (doc.pricesIncludeVat) price /= vf;
+    const gross = n(l.qty) * price * (1 - n(l.lineDiscountPct) / 100);
+    grossAll += gross;
+    return { l, gross, units: (n(l.qty) + n(l.freeQty)) * (n(l.packSize) || 1), printedNet: price };
+  });
+  const dd = docDiscPct(doc, grossAll) / 100;
+  const groups = {};
+  L.forEach((x, i) => { const k = x.l.pid || cleanBarcode(x.l.barcode) || norm(x.l.name) || "i" + i; (groups[k] ||= { net: 0, units: 0, idx: [] }); groups[k].net += x.gross * (1 - dd) * (1 - rebate); groups[k].units += x.units; groups[k].idx.push(i); });
+  const eff = new Array(L.length).fill(null);
+  for (const g of Object.values(groups)) { const e = g.units > 0 ? g.net / g.units : null; g.idx.forEach(i => eff[i] = e); }
+  const printedUnit = L.map(x => x.printedNet / (n(x.l.packSize) || 1));
+  const sumCalc = grossAll * (1 - dd);
+  return { eff, printedUnit, grossAll, docDiscPct: dd * 100, totalExVat: sumCalc, totalWithVat: sumCalc * vf };
+}
+
+function buildIdx() {
+  IDX = {};
+  const add = (pid, rec, k) => { (IDX[pid] ||= { inv: [], q: [] })[k].push(rec); };
+  for (const p of S.purchases) (p.lines || []).forEach(l => { if (l.pid && l.eff > 0) add(l.pid, { sup: p.supplierId, date: p.date || "", at: p.createdAt || 0, eff: l.eff, doc: p.id, docNo: p.docNo, unitPrice: n(l.unitPrice), qty: n(l.qty), free: n(l.freeQty), pack: n(l.packSize) || 1, disc: n(l.lineDiscountPct) }, "inv"); });
+  for (const q of S.quotes) (q.lines || []).forEach(l => { if (l.pid && l.eff > 0) add(l.pid, { sup: q.supplierId, date: q.date || "", at: q.createdAt || 0, eff: l.eff, doc: q.id, validUntil: q.validUntil || "", unitPrice: n(l.unitPrice), qty: n(l.qty), free: n(l.freeQty), pack: n(l.packSize) || 1, disc: n(l.lineDiscountPct) }, "q"); });
+  const ord = (a, b) => (b.date || "").localeCompare(a.date || "") || (b.at - a.at);
+  for (const v of Object.values(IDX)) { v.inv.sort(ord); v.q.sort(ord); }
+}
+const supName = id => S.suppliers[id]?.name || "ספק לא ידוע";
+
+function stats(pid) {
+  const p = S.products[pid] || {}; const ix = IDX[pid] || { inv: [], q: [] };
+  const cur = ix.inv[0] || null;
+  const prevSame = cur ? ix.inv.find(r => r !== cur && r.sup === cur.sup) : null;
+  const lastBySup = {}; for (const r of ix.inv) if (!lastBySup[r.sup]) lastBySup[r.sup] = r;
+  const qBySup = {}; for (const r of ix.q) if (!qBySup[r.sup] && !(r.validUntil && r.validUntil < today())) qBySup[r.sup] = r;
+  const offers = [...Object.values(lastBySup).map(r => ({ ...r, kind: "inv" })), ...Object.values(qBySup).map(r => ({ ...r, kind: "q" }))];
+  const best = offers.reduce((a, b) => (!a || b.eff < a.eff ? b : a), null);
+  const vf = vatF();
+  const target = (p.targetMargin != null && p.targetMargin !== "" ? n(p.targetMargin) : n(S.settings.margin)) / 100;
+  const cost = cur?.eff ?? (best?.eff ?? null);
+  const sell = nn(p.sellPrice);
+  const sellEx = sell ? sell / vf : null;
+  const margin = sellEx && cost ? (sellEx - cost) / sellEx : null;
+  const rec = cost ? roundPrice(cost / (1 - target) * vf) : null;
+  const change = cur && prevSame ? cur.eff / prevSame.eff - 1 : null;
+  const alerts = [];
+  if (cost && !sell) alerts.push({ t: "noprice", sev: "warn", txt: `אין מחיר מכירה. עלות ליחידה ${money(cost)} לפני מע"מ, מחיר מומלץ ${money(rec)}.` });
+  if (margin != null && margin < target - 0.005) alerts.push({ t: "margin", sev: "bad", txt: `הרווח ירד ל-${pct(margin)} (היעד ${pct(target, 0)}). מחיר מומלץ לצרכן ${money(rec)} במקום ${money(sell)}.` });
+  if (change != null && change * 100 > n(S.settings.alertPct)) alerts.push({ t: "up", sev: "warn", txt: `${supName(cur.sup)} העלה מחיר ב-${pct(change)}: מ-${money(prevSame.eff)} ל-${money(cur.eff)} ליחידה (עלות אמיתית).` });
+  if (cur && best && best.sup !== cur.sup && best.eff < cur.eff * (1 - n(S.settings.cheaperPct) / 100)) alerts.push({ t: "cheaper", sev: "info", txt: `אצל ${supName(best.sup)} זה עולה ${money(best.eff)} ליחידה${best.kind === "q" ? " (לפי הצעת מחיר)" : ""}, חיסכון של ${pct(1 - best.eff / cur.eff)} לעומת ${supName(cur.sup)}.` });
+  return { p, ix, cur, prevSame, offers, best, target, cost, sell, margin, rec, change, alerts };
+}
+function allAlerts() {
+  const out = [];
+  for (const pid of Object.keys(S.products)) { const s = stats(pid); s.alerts.forEach(a => out.push({ ...a, pid, s })); }
+  const rank = { bad: 0, warn: 1, info: 2 };
+  return out.sort((a, b) => rank[a.sev] - rank[b.sev]);
+}
+
+/* ---------- data layer ---------- */
+async function put(path, data) { if (!db) throw new Error("no db"); await db.doc(path).set(JSON.parse(JSON.stringify(data))); }
+async function del(path) { await db.doc(path).delete(); }
+function subscribe() {
+  let got = 0; const need = 5; const timer = setTimeout(() => { if (!S.ready) setStatus("הנתונים עדיין לא נטענו. בדוק חיבור."); }, 10000);
+  const done = () => { if (++got === need) { S.ready = true; clearTimeout(timer); setStatus(""); } };
+  const once = f => { let d = false; return s => { f(s); if (!d) { d = true; done(); } refresh(); }; };
+  const err = e => setStatus("שגיאת נתונים: " + (e?.code || ""));
+  db.doc("settings/main").onSnapshot(once(s => { S.settings = { ...DEF, ...(s.exists ? s.data() : {}) }; }), err);
+  db.collection("suppliers").onSnapshot(once(s => { S.suppliers = {}; s.docs.forEach(d => S.suppliers[d.id] = { id: d.id, ...d.data() }); }), err);
+  db.collection("products").onSnapshot(once(s => { S.products = {}; s.docs.forEach(d => S.products[d.id] = { id: d.id, ...d.data() }); }), err);
+  db.collection("purchases").onSnapshot(once(s => { S.purchases = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
+  db.collection("quotes").onSnapshot(once(s => { S.quotes = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
+  db.collection("pricechanges").onSnapshot(s => { S.changes = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.at - a.at); refresh(); }, err);
+}
+function setStatus(t) { $("#status").textContent = t; }
+let rq = 0;
+function refresh() {
+  cancelAnimationFrame(rq);
+  rq = requestAnimationFrame(() => {
+    buildIdx();
+    const c = allAlerts().filter(a => a.sev !== "info").length;
+    const b = $("#badge"); b.hidden = !c; b.textContent = c;
+    if (view !== "inbox" || !draft || draft.stage === "pick") render();
+  });
+}
+
+/* ---------- routing ---------- */
+const VIEWS = ["inbox", "alerts", "products", "compare", "quotes", "suppliers", "invoices", "setup"];
+function route() { const h = location.hash.slice(1); view = VIEWS.includes(h) ? h : "inbox"; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(); }
+window.addEventListener("hashchange", route);
+function go(v) { if (location.hash !== "#" + v) location.hash = v; else route(); }
+
+function render() {
+  const el = $("#view");
+  const R = { inbox: vInbox, alerts: vAlerts, products: vProducts, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
+  el.innerHTML = R();
+  after[view]?.();
+}
+const after = {};
+const demoNote = () => Object.values(S.products).some(p => p.demo) ? `<div class="note">כרגע מוצגים <b>נתוני דוגמה</b> (מסומנים "דוגמה"). אפשר למחוק אותם בלשונית הגדרות כשמתחילים לעבוד עם נתונים אמיתיים.</div>` : "";
+const emptyMsg = (t, s) => `<div class="panel" style="text-align:center;align-items:center"><h3>${t}</h3><p class="muted">${s}</p></div>`;
+
+/* ---------- INBOX ---------- */
+function newDraft(kind) { return { stage: "pick", kind: kind || "invoice", supplierId: "", files: [], excel: null, busy: false }; }
+function supOptions(sel, withAuto = true) {
+  const opts = Object.values(S.suppliers).sort((a, b) => (a.name || "").localeCompare(b.name || "", "he")).map(s => `<option value="${esc(s.id)}" ${s.id === sel ? "selected" : ""}>${esc(s.name)}</option>`).join("");
+  return (withAuto ? `<option value="">זיהוי אוטומטי / ספק חדש</option>` : "") + opts;
+}
+function vInbox() {
+  if (!draft) draft = newDraft();
+  if (draft.stage === "review") return vReview();
+  if (draft.stage === "map") return vExcelMap();
+  const d = draft; const isQ = d.kind === "quote";
+  const sup = S.suppliers[d.supplierId];
+  return `${demoNote()}
+  <div class="panel">
+    <div class="row between"><h2>${isQ ? "קליטת הצעת מחיר" : "קליטת חשבונית ספק"}</h2>
+      <div class="seg"><button data-act="kind" data-k="invoice" class="${!isQ ? "on" : ""}">חשבונית</button><button data-act="kind" data-k="quote" class="${isQ ? "on" : ""}">הצעת מחיר</button></div></div>
+    <label class="fld">ספק<select id="dSup">${supOptions(d.supplierId)}</select></label>
+    
+    <div class="drop" id="drop">
+      <div class="row" style="justify-content:center">
+        <button class="btn primary" data-act="cam">צלם חשבונית</button>
+        <button class="btn" data-act="img">תמונה או PDF</button>
+        <button class="btn" data-act="xls">קובץ אקסל</button>
+      </div>
+      <p class="small muted">חשבונית של כמה עמודים: מצלמים כל עמוד ומוסיפים. אפשר גם לגרור קבצים לכאן.</p>
+      ${d.files.length ? `<div class="thumbs">${d.files.map((f, i) => `<div class="thumb">${f.url ? `<img src="${f.url}" alt="עמוד ${i + 1}">` : esc(f.label)}<button data-act="rmfile" data-i="${i}" aria-label="הסר">×</button></div>`).join("")}</div>` : ""}
+    </div>
+    ${d.files.length ? `<div class="row"><button class="btn primary" data-act="read" ${d.busy ? "disabled" : ""}>${d.busy ? `<span class="spin"></span> Claude קורא את המסמך…` : "קרא את המסמך"}</button>${d.busy ? `<button class="btn" data-act="stop">עצור</button>` : ""}${!d.busy && d.files.length && d.files.every(f => f.kind === "pdf") ? `<button class="btn" data-act="readlocal">קרא בלי Claude</button>` : ""}<span class="small muted" id="readMsg">${esc(d.msg || "")}</span></div>` : ""}
+    ${d.err ? `<div class="warnbox">${esc(d.err)}</div>` : ""}
+    <p class="small muted">אפשר גם <button class="btn ghost small" data-act="manual">להקליד ידנית</button>.</p>
+  </div>
+  ${recentDocsPanel()}`;
+}
+function recentDocsPanel() {
+  const docs = [...S.purchases.map(x => ({ ...x, k: "inv" })), ...S.quotes.map(x => ({ ...x, k: "q" }))].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 5);
+  if (!docs.length) return "";
+  return `<div class="stack"><h3>נקלטו לאחרונה</h3><div class="list">${docs.map(x => `<div class="li click" data-act="opendoc" data-k="${x.k}" data-id="${esc(x.id)}" style="grid-template-columns:minmax(0,1fr) auto auto"><div class="nm"><b>${esc(supName(x.supplierId))}</b><span class="small muted">${x.k === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)} · ${(x.lines || []).length} שורות</span></div>${x.demo ? `<span class="pill demo">דוגמה</span>` : "<span></span>"}<span class="num">${money(x.totalWithVat)}</span></div>`).join("")}</div></div>`;
+}
+after.inbox = () => {
+  const s = $("#dSup"); if (s) s.onchange = () => { draft.supplierId = s.value; render(); };
+  const dr = $("#drop"); if (dr) {
+    dr.ondragover = e => { e.preventDefault(); dr.classList.add("over"); };
+    dr.ondragleave = () => dr.classList.remove("over");
+    dr.ondrop = e => { e.preventDefault(); dr.classList.remove("over"); addFiles([...e.dataTransfer.files]); };
+  }
+  if (draft?.stage === "review") afterReview();
+  if (draft?.stage === "map") afterMap();
+};
+async function addFiles(files) {
+  for (const f of files) {
+    if (/\.(xlsx|xls|csv)$/i.test(f.name)) { await loadExcel(f, "invoice"); return; }
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) { draft.files.push({ file: f, kind: "pdf", label: "PDF\n" + f.name.slice(0, 14) }); }
+    else if (f.type.startsWith("image/")) { draft.files.push({ file: f, kind: "img", url: URL.createObjectURL(f) }); }
+  }
+  draft.err = ""; render();
+}
+["fCam", "fImg"].forEach(id => $("#" + id).addEventListener("change", e => { addFiles([...e.target.files]); e.target.value = ""; }));
+$("#fXls").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadExcel(f, "invoice"); });
+$("#fPos").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadExcel(f, "pos"); });
+
+/* camera: phones open the camera from the file input; computers use the webcam in a window */
+async function openCam() {
+  const phone = matchMedia("(pointer:coarse)").matches;
+  if (phone || !navigator.mediaDevices?.getUserMedia) { $("#fCam").click(); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
+  catch (e) { toast("אין גישה למצלמה במחשב הזה. בחר קובץ תמונה, או צלם מהטלפון."); $("#fImg").click(); return; }
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal"><div class="row between"><h2>צילום חשבונית</h2><span class="small muted" data-count>0 דפים</span></div>
+    <video autoplay playsinline muted style="width:100%;border-radius:8px;background:#000"></video>
+    <p class="small muted">החזק את החשבונית ישר מול המצלמה ובאור טוב. בחשבונית של כמה דפים צלם כל דף בנפרד.</p>
+    <div class="row"><button class="btn primary" data-shot>צלם דף</button><button class="btn" data-done>סיימתי</button></div></div>`;
+  document.body.append(bg);
+  const v = bg.querySelector("video"); v.srcObject = stream;
+  let shots = 0;
+  const stop = () => { stream.getTracks().forEach(t => t.stop()); bg.remove(); };
+  bg.addEventListener("click", async e => {
+    if (e.target.closest("[data-done]") || e.target === bg) { stop(); render(); }
+    if (e.target.closest("[data-shot]")) {
+      const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+      if (!c.width) return;
+      c.getContext("2d").drawImage(v, 0, 0);
+      const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
+      const f = new File([blob], `page-${Date.now()}.jpg`, { type: "image/jpeg" });
+      draft.files.push({ file: f, kind: "img", url: URL.createObjectURL(f) });
+      shots++; bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
+    }
+  });
+}
+
+
+/* ---------- PDF text tables: read a digital PDF without AI ---------- */
+const HDR_KEYS = ["ברקוד", "כמות", "מחיר", "תאור", "תיאור", "פריט", "מק\"ט", "מקט", "סה\"כ", "הנחה", "שורה", "יחידה", "שם"];
+const isNumTok = t => /^[\*\-]?[\d.,]+%?\*?(\s*(ש"ח|יח'|₪))?$/.test(t.trim());
+function pdfTableFromItems(pages) {
+  const out = { header: null, rows: [], lines: [] };
+  let cols = null;
+  for (const items of pages) {
+    const its = items.filter(i => i.s.trim()).sort((a, b) => a.y - b.y || b.x - a.x);
+    const lines = []; for (const it of its) { const L = lines.find(l => Math.abs(l.y - it.y) < 2.5); if (L) L.items.push(it); else lines.push({ y: it.y, items: [it] }); }
+    lines.sort((a, b) => a.y - b.y);
+    lines.forEach(l => { l.items.sort((a, b) => b.x - a.x); l.text = l.items.map(i => i.s).join(" "); });
+    out.lines.push(...lines);
+    const hits = l => HDR_KEYS.filter(k => l.text.includes(k)).length;
+    let hi = -1, best = 2; lines.forEach((l, i) => { const h = hits(l); if (h > best) { best = h; hi = i; } });
+    let start;
+    if (hi >= 0) {
+      const hy = lines[hi].y;
+      const hdrLines = lines.filter((l, i) => Math.abs(l.y - hy) <= 12 && (i <= hi || !l.items.some(t => isNumTok(t.s))));
+      const hitems = hdrLines.flatMap(l => l.items).map(i => ({ ...i, c: i.x + i.w / 2 }));
+      const cl = []; for (const it of hitems.sort((a, b) => b.c - a.c)) { const C = cl.find(c => Math.abs(c.c - it.c) < Math.max(8, it.w / 2)); if (C) { C.items.push(it); C.c = C.items.reduce((a, b) => a + b.c, 0) / C.items.length; } else cl.push({ c: it.c, items: [it] }); }
+      cl.sort((a, b) => b.c - a.c);
+      cols = cl.map(c => ({ c: c.c, label: c.items.sort((a, b) => a.y - b.y || b.x - a.x).map(i => i.s).join(" ") }));
+      if (!out.header) out.header = cols.map(c => c.label);
+      start = Math.max(...hdrLines.map(l => lines.indexOf(l))) + 1;
+    } else { if (!cols) continue; start = 0; }
+    const STOP = /מחיר כולל|הנחה כללית|סה"כ לתשלום|סה"כ מחיר|סה"כ לפני|סה"כ כולל|מע"מ \(|ברקוד הצעת|בתוקף עד|העברה לדף|המשך בדף/;
+    const nearest = x => { let bi = 0, bd = 1e9; cols.forEach((c, i) => { const d = Math.abs(c.c - x); if (d < bd) { bd = d; bi = i; } }); return bi; };
+    const data = [];
+    for (let i = start; i < lines.length; i++) { const l = lines[i]; if (STOP.test(l.text)) { if (data.length) break; else continue; } data.push(l); }
+    const hardNum = t => /\*/.test(t) || /^\d{7,}$/.test(t.trim()) || /^-?[\d,]+\.\d{1,3}%?$/.test(t.trim());
+    const isUnit = t => /^(ש"ח|₪|יח'|%|יח)$/.test(t.trim());
+    const phrasesOf = l => {
+      const ph = [];
+      for (const it of l.items) {
+        const q = ph[ph.length - 1];
+        if (q) { const gap = q.x - (it.x + it.w); const A = q.parts[q.parts.length - 1], B = it.s; if (gap < 5 && !isUnit(A) && (isUnit(B) || (!hardNum(A) && !hardNum(B)))) { q.x = it.x; q.parts.push(B); continue; } }
+        ph.push({ x: it.x, r: it.x + it.w, parts: [it.s] });
+      }
+      return ph.map(q => ({ x: q.x, w: q.r - q.x, s: q.parts.join(" ") }));
+    };
+    const asg = []; for (const l of data) for (const ph of phrasesOf(l)) asg.push({ l, it: ph, col: nearest(ph.x + ph.w / 2) });
+    const R = cols.map((c, i) => { const r = asg.filter(a => a.col === i).map(a => a.it.x + a.it.w).sort((a, b) => a - b); return r.length ? r[Math.floor(r.length / 2)] : null; });
+    for (const a of asg) { const re = a.it.x + a.it.w; let bi = a.col, bd = R[a.col] != null ? Math.abs(R[a.col] - re) : 1e9; R.forEach((r, i) => { if (r != null && Math.abs(r - re) < bd - 0.5) { bd = Math.abs(r - re); bi = i; } }); if (bd < 6) a.col = bi; }
+    const numCol = cols.map((c, i) => { const v = asg.filter(a => a.col === i); return v.length && v.filter(a => isNumTok(a.it.s)).length / v.length > 0.5; });
+    let row = null; const rows = [];
+    for (const l of data) {
+      const mine = asg.filter(a => a.l === l);
+      const startsNew = !row || mine.some(a => numCol[a.col] && isNumTok(a.it.s) && row.cells[a.col].some(t => isNumTok(t)));
+      if (startsNew) { row = { cells: cols.map(() => []) }; rows.push(row); }
+      for (const a of mine) row.cells[a.col].push(a.it.s);
+    }
+    for (const r of rows) out.rows.push(r.cells.map(c => c.join(" ").replace(/\*/g, "").trim()));
+  }
+  return out;
+}
+function pdfMeta(lines) {
+  const full = lines.map(l => l.text).join("\n");
+  const dec = l => l.items.map(i => i.s.trim()).filter(t => /^-?[\d,]+\.\d{2}%?$/.test(t));
+  const meta = { docType: /הצעת מחיר/.test(full) ? "quote" : "invoice" };
+  const dn = lines.find(l => /(הצעת מחיר|חשבונית|תעודת משלוח)/.test(l.text) && /(מספר|מס'|מס\b)/.test(l.text));
+  if (dn) { const t = dn.items.map(i => i.s.trim()).find(x => /\d{4,}/.test(x)); if (t) meta.docNo = t; }
+  const dateOf = re => { const l = lines.find(l => re.test(l.text) && /\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4}/.test(l.text)); const m = l && l.text.match(/(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})/); if (!m) return null; let y = +m[3]; if (y < 100) y += 2000; return `${y}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`; };
+  meta.date = dateOf(/תאריך/) || today(); meta.validUntil = dateOf(/בתוקף/) || "";
+  meta.taxIds = [...new Set(full.match(/\b\d{9}\b/g) || [])];
+  const txL = lines.find(l => /(עוסק מורשה|ח\.פ|ח"פ|מספר עוסק)/.test(l.text) && /\b\d{9}\b/.test(l.text));
+  meta.supplierTaxId = txL ? txL.text.match(/\b\d{9}\b/)[0] : (meta.taxIds[0] || "");
+  const nmL = lines.find(l => /בע"מ|בע״מ/.test(l.text)) || lines.find(l => /[\u0590-\u05FF]{3}/.test(l.text));
+  meta.supplierName = nmL ? nmL.text.trim().slice(0, 60) : "";
+  const tot = lines.filter(l => /סה"כ/.test(l.text)).flatMap(l => dec(l).map(n));
+  if (tot.length) meta.totalWithVat = Math.max(...tot);
+  const vatL = lines.find(l => /מע"מ/.test(l.text) && dec(l).length && !/כולל/.test(l.text));
+  const discL = lines.find(l => /הנחה/.test(l.text) && dec(l).length && dec(l).length <= 2 && !HDR_KEYS.filter(k => k !== "הנחה").some(k => l.text.includes(k)));
+  if (discL) { const t = dec(discL)[0]; meta.docDiscount = { type: t.includes("%") ? "pct" : "amount", value: Math.abs(n(t)), onVat: vatL && discL.y > vatL.y ? "after" : "before" }; }
+  return meta;
+}
+async function pdfParse(files) {
+  const pages = [];
+  for (const f of files) {
+    const pdf = await pdfjsLib.getDocument({ data: await f.file.arrayBuffer(), isEvalSupported: false }).promise;
+    for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+      const page = await pdf.getPage(i); const vp = page.getViewport({ scale: 1 }); const tc = await page.getTextContent();
+      pages.push(tc.items.map(t => ({ x: t.transform[4], y: vp.height - t.transform[5], w: t.width, s: t.str })));
+    }
+  }
+  const t = pdfTableFromItems(pages);
+  if (!t.header || t.rows.length < 1) return null;
+  t.meta = pdfMeta(t.lines); delete t.lines;
+  return t;
+}
+const pdfSig = header => header.map(norm).join("|");
+function supplierFromMeta(meta) {
+  for (const s of Object.values(S.suppliers)) { const tx = String(s.taxId || "").replace(/\D/g, ""); if (tx && meta.taxIds?.includes(tx)) return s.id; }
+  return "";
+}
+/* learn which PDF column holds which field from a reading the user confirmed */
+function learnPdfMap(t, lines) {
+  const byBc = {}; for (const l of lines) { const bc = cleanBarcode(l.barcode); if (bc) (byBc[bc] ||= []).push(l); }
+  const ncols = t.header.length; const used = new Set(); const cols = {};
+  const pick = (field, score) => { let bi = -1, bs = 0; for (let c = 0; c < ncols; c++) { if (used.has(c)) continue; const sc = score(c); if (sc > bs) { bs = sc; bi = c; } } if (bi >= 0 && bs > 0) { cols[field] = bi; used.add(bi); } else cols[field] = -1; };
+  pick("barcode", c => t.rows.filter(r => byBc[cleanBarcode(r[c])]).length);
+  if (cols.barcode < 0) return null;
+  const al = t.rows.map(r => ({ r, ls: byBc[cleanBarcode(r[cols.barcode])] || [] })).filter(x => x.ls.length);
+  const eq = (a, b) => Math.abs(a - b) < 0.011;
+  const numScore = f => c => al.filter(({ r, ls }) => { const v = n(r[c]); return v !== 0 && ls.some(l => eq(v, n(l[f])) || (f === "qty" && eq(v, n(l.freeQty)))); }).length;
+  pick("lineTotal", numScore("lineTotal")); pick("unitPrice", numScore("unitPrice")); pick("qty", numScore("qty")); pick("lineDiscountPct", numScore("lineDiscountPct"));
+  pick("supplierCode", c => al.filter(({ r, ls }) => r[c] && ls.some(l => String(l.supplierCode || "").trim() === r[c].trim())).length);
+  pick("name", c => al.filter(({ r }) => /[֐-׿]{3,}/.test(r[c] || "")).length);
+  cols.freeQty = -1; cols.packSize = -1;
+  if (cols.unitPrice < 0 || cols.qty < 0 || cols.name < 0) return null;
+  return { sig: pdfSig(t.header), cols };
+}
+async function readLocal(silent) {
+  if (!draft.files.length || !draft.files.every(f => f.kind === "pdf")) return false;
+  let t = null;
+  try { t = await pdfParse(draft.files); } catch (e) { t = null; }
+  if (!t) { if (!silent) { draft.err = "לא נמצאה טבלה עם טקסט ב-PDF הזה (כנראה סריקה של תמונה). צריך לקרוא אותו עם Claude."; render(); } return false; }
+  draft.pdfTable = t;
+  const supId = draft.supplierId || supplierFromMeta(t.meta);
+  const sup = S.suppliers[supId];
+  const st = { mode: "invoice", rows: [t.header, ...t.rows], headerRow: 0, cols: guessCols(t.header, INV_FIELDS), fname: draft.files[0].file.name, pdf: true, meta: t.meta };
+  if (sup?.pdfMap && sup.pdfMap.sig === pdfSig(t.header)) { draft.supplierId = supId; st.cols = sup.pdfMap.cols; st.meta = { ...t.meta, pricesIncludeVat: !!sup.pdfMap.pricesIncludeVat }; applyExcel(st, true); return true; }
+  if (silent) return false;
+  if (supId) draft.supplierId = supId;
+  draft = { ...draft, stage: "map", map: st }; render(); return true;
+}
+
+/* PDF -> page images + text layer */
+async function pdfToImages(file, maxPages) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
+  const imgs = []; let text = "";
+  for (let i = 1; i <= Math.min(pdf.numPages, maxPages); i++) {
+    const page = await pdf.getPage(i);
+    const vp = page.getViewport({ scale: 2 });
+    const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    imgs.push(await new Promise(r => c.toBlob(r, "image/jpeg", 0.85)));
+    try { const tc = await page.getTextContent(); text += tc.items.map(t => t.str).join(" ") + "\n"; } catch (e) { }
+  }
+  return { imgs, text };
+}
+
+let readCtl = null;
+async function readDoc() {
+  if (await readLocal(true)) return;
+  if (!sample) { draft.err = "קריאה עם Claude לא זמינה כאן. ב-PDF אפשר ללחוץ \"קרא בלי Claude\", ואפשר גם לקלוט אקסל או להקליד ידנית."; render(); return; }
+  const lim = await sample.limits().catch(() => null);
+  if (!lim?.images) { draft.err = "התצוגה הזו לא יכולה לשלוח תמונות ל-Claude. נסה מאפליקציית Claude או מהדפדפן."; render(); return; }
+  draft.busy = true; draft.err = ""; draft.msg = "מכין את העמודים…"; render();
+  try {
+    let images = [], pdfText = "";
+    for (const f of draft.files) {
+      if (f.kind === "pdf") { const r = await pdfToImages(f.file, lim.images.maxCount); images.push(...r.imgs); pdfText += r.text; }
+      else images.push(f.file);
+    }
+    images = images.slice(0, lim.images.maxCount);
+    const sup = S.suppliers[draft.supplierId];
+    const prompt = buildPrompt(sup, draft.kind, pdfText);
+    readCtl = new AbortController();
+    const m = $("#readMsg"); if (m) m.textContent = "Claude קורא את המסמך. זה לוקח בדרך כלל חצי דקה עד דקה.";
+    const res = await sample.json(prompt, { images, signal: readCtl.signal, cache: false });
+    startReview(res, "ai");
+  } catch (e) {
+    draft.busy = false;
+    const code = e?.code;
+    draft.err = code === "cancelled" ? "" : code === "no_key" ? "כדי לקרוא צילומים ו-PDF צריך להזין מפתח API בלשונית הגדרות. אקסל והקלדה ידנית עובדים גם בלי." : code === "bad_key" ? "מפתח ה-API לא תקין. בדוק אותו בלשונית הגדרות." : code === "bad_model" ? "שם המודל בהגדרות לא מוכר. עדכן אותו בלשונית הגדרות." : code === "network" ? "אין חיבור לאינטרנט." : code === "not_granted" ? "לא אושרה גישה ל-Claude לדף הזה." : code === "rate_limited" ? "יותר מדי בקשות כרגע. נסה שוב בעוד כמה דקות." : code === "invalid_json" ? "Claude לא החזיר טבלה תקינה. נסה שוב או צלם את החשבונית ישר יותר ובאור טוב." : code === "image_rejected" ? "אחת התמונות לא התקבלה (סוג או גודל). נסה תמונה אחרת." : "הקריאה נכשלה (" + (code || e?.message || "שגיאה") + "). נסה שוב.";
+    render();
+  }
+}
+function buildPrompt(sup, kind, pdfText) {
+  const tpl = sup ? `\nKNOWN LAYOUT FOR THIS SUPPLIER ("${sup.name}"):\n${sup.templateNotes || "(none yet)"}\n${sup.hints ? "Store owner's rules for this supplier: " + sup.hints + "\n" : ""}${(sup.corrections || []).length ? "Past corrections the store owner made to earlier readings (apply the same logic):\n- " + sup.corrections.slice(-15).join("\n- ") + "\n" : ""}` : "";
+  return `You are reading a ${kind === "quote" ? "price quote (הצעת מחיר)" : "supplier invoice / delivery note (חשבונית / תעודת משלוח)"} from an Israeli supplier to a small store. The document is in Hebrew. The images are its pages in order.
+Extract every product line exactly as printed. Reply with ONLY this JSON:
+{"docType":"invoice"|"delivery_note"|"quote","supplierName":string,"supplierTaxId":string|null,"docNo":string|null,"date":"YYYY-MM-DD"|null,"validUntil":"YYYY-MM-DD"|null,
+"pricesIncludeVat":boolean,
+"docDiscount":{"type":"none"|"pct"|"amount","value":number,"onVat":"before"|"after"},
+"totalBeforeVat":number|null,"vatAmount":number|null,"totalWithVat":number|null,
+"lines":[{"barcode":string|null,"supplierCode":string|null,"name":string,"qty":number,"freeQty":number,"packSize":number,"unitPrice":number,"lineDiscountPct":number,"lineTotal":number|null}],
+"templateNotes":string,
+"doubts":[string]}
+Rules:
+- barcode: the 7-14 digit EAN/UPC (ברקוד). A supplier item code (מק"ט / קוד פריט) goes in supplierCode, never in barcode.
+- docType: "quote" when the document is a price quote / offer (הצעת מחיר), even if the user expected an invoice.
+- qty: charged quantity in the document's own unit. unitPrice: the list price per that unit BEFORE line discount and BEFORE VAT when both are printed. lineTotal: the printed line total.
+- If a row shows both a list price and a "price after discount" (מחיר אחרי הנחה), unitPrice = the list price and lineDiscountPct = the discount. Never put the after-discount price in unitPrice together with a discount percent.
+- Free goods (בונוס / מתנה / חינם / ללא חיוב / מחיר 0 / "10+2"): put the free quantity in freeQty. If the free goods are on their own line, output that line separately with qty 0, freeQty = the free quantity, unitPrice 0, and the same barcode/name as the paid line.
+- packSize: number of separate retail units inside one invoiced unit when stated (קרטון 12 → 12, שישייה → 6, מארז 24 → 24), else 1. A weight or volume in the product name (15 ק"ג, 405 גרם, 1.5 ליטר, 500 מ"ל) is NEVER a pack size: a 15 kg bag is packSize 1.
+- lineDiscountPct: line discount as a percent. If the discount is printed as an amount, convert it to a percent of qty*unitPrice.
+- pricesIncludeVat: true only if the unit prices already include מע"מ.
+- docDiscount: a discount on the whole document (הנחה כללית / הנחת סוף חשבון / הנחה לאחר מע"מ). onVat="after" when it is taken from the total that already includes VAT.
+- A tiny adjustment that only rounds the final total to whole shekels (agorot, e.g. 0.24) is NOT a discount: use docDiscount type "none". Do not list it in doubts.
+- templateNotes: 3-6 short lines in Hebrew describing this supplier's layout for next time: which column holds the barcode, how bonus/free goods appear, how discounts appear, whether prices include VAT, pack units.
+- doubts: Hebrew notes ONLY about values that may be wrong and that the store owner should check by eye (blurry or unreadable digits, a line total that does not match qty × price, a page that seems missing). Do NOT explain readings you are confident about (which column you used, that bonus lines are free goods, which price includes VAT). A price "including VAT" that equals the price × 1.18, a line without a discount, and a few agorot of rounding in the totals are all normal: never list them. Empty array if nothing is doubtful.
+- Use plain numbers. Never invent lines. If a value is unreadable use null and mention it in doubts.${tpl}${pdfText ? "\nText layer extracted from the PDF (Hebrew may appear reversed; prefer the images when they disagree):\n" + pdfText.slice(0, 14000) : ""}`;
+}
+
+/* ----- matching ----- */
+const WEIGHT_RE = '(ק"ג|קג|ק״ג|קילו|kg|גרם|גר\'?|ג\'|gr|ליטר|ל\'|ל|מ"ל|מל|ml)';
+function weightLike(name, k) { if (!(k > 1)) return false; return new RegExp("(^|[^\\d.])" + String(k).replace(".", "\\.") + "\\s*" + WEIGHT_RE + "(?![\\u0590-\\u05FF])", "i").test(String(name || "")); }
+function parseSize(name) {
+  const m = String(name || "").match(/(\d+(?:[.,]\d+)?)\s*(ק"ג|קג|ק״ג|קילו|kg|גרם|גר'?|ג'|gr|ליטר|ל'|מ"ל|מל|ml)(?![\u0590-\u05FF])/i);
+  if (!m) return null; const v = parseFloat(m[1].replace(",", ".")); const u = m[2];
+  if (/ק"ג|קג|ק״ג|קילו|kg/i.test(u)) return { amount: v, unit: "kg" };
+  if (/גרם|גר|ג'|gr/i.test(u)) return { amount: v / 1000, unit: "kg" };
+  if (/ליטר|ל'/.test(u)) return { amount: v, unit: "l" };
+  return { amount: v / 1000, unit: "l" };
+}
+function matchLine(l, supId) {
+  const bc = cleanBarcode(l.barcode);
+  if (bc && S.products[bc]) return { pid: bc, how: "barcode" };
+  const nm = norm(l.name), code = String(l.supplierCode || "").trim();
+  if (supId) for (const p of Object.values(S.products)) {
+    const al = p.aliases?.[supId] || [];
+    if ((nm && al.includes(nm)) || (code && al.includes("#" + code))) return { pid: p.id, how: "alias" };
+  }
+  if (nm) for (const p of Object.values(S.products)) if (norm(p.name) === nm) return { pid: p.id, how: "name" };
+  return { pid: bc || "", how: "new" };
+}
+function findSupplier(res) {
+  if (draft.supplierId && S.suppliers[draft.supplierId]) return draft.supplierId;
+  const tax = String(res.supplierTaxId || "").replace(/\D/g, "");
+  for (const s of Object.values(S.suppliers)) if (tax && String(s.taxId || "").replace(/\D/g, "") === tax) return s.id;
+  const nm = norm(res.supplierName);
+  for (const s of Object.values(S.suppliers)) if (nm && (norm(s.name) === nm || norm(s.name).includes(nm) || nm.includes(norm(s.name)))) return s.id;
+  return "";
+}
+function startReview(res, source) {
+  const supId = findSupplier(res || {});
+  const lines = (res?.lines || []).map(l => {
+    const line = { barcode: cleanBarcode(l.barcode) || (l.barcode ? String(l.barcode) : ""), supplierCode: l.supplierCode || "", name: l.name || "", qty: n(l.qty), freeQty: n(l.freeQty), packSize: n(l.packSize) || 1, unitPrice: n(l.unitPrice), lineDiscountPct: n(l.lineDiscountPct), lineTotal: nn(l.lineTotal) };
+    const m = matchLine(line, supId); line.pid = m.pid; line.how = m.how;
+    const stored = supId && m.pid && S.products[m.pid]?.packs?.[supId];
+    if (stored && line.packSize === 1 && !weightLike(line.name, stored)) line.packSize = stored;
+    return line;
+  });
+  const fixes = [];
+  for (const l of lines) if (weightLike(l.name, l.packSize)) { fixes.push(`"${l.name}": ${l.packSize} הוא משקל או נפח ולא כמות יחידות באריזה, ולכן יח' באריזה נשאר 1.`); l.packSize = 1; }
+  // price already after discount + discount percent = discount counted twice
+  for (const l of lines) {
+    if (!(l.lineDiscountPct > 0 && l.lineDiscountPct < 100 && l.lineTotal > 0 && l.qty > 0)) continue;
+    const tol = Math.max(0.05, l.lineTotal * 0.003), full = l.qty * l.unitPrice;
+    if (Math.abs(full * (1 - l.lineDiscountPct / 100) - l.lineTotal) > tol && Math.abs(full - l.lineTotal) <= tol) {
+      const orig = +(l.unitPrice / (1 - l.lineDiscountPct / 100)).toFixed(2);
+      fixes.push(`"${l.name}": המחיר ${l.unitPrice} כבר היה אחרי ההנחה, תוקן למחיר המחירון ${orig} עם הנחה של ${l.lineDiscountPct}%.`);
+      l.unitPrice = orig;
+    }
+  }
+  // tiny document "discount" that is only rounding
+  let dDisc = { type: res?.docDiscount?.type || "none", value: n(res?.docDiscount?.value), onVat: res?.docDiscount?.onVat || "before" };
+  if (dDisc.type !== "none" && dDisc.value) {
+    const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice * (1 - l.lineDiscountPct / 100), 0);
+    const amt = dDisc.type === "pct" ? gross * dDisc.value / 100 : dDisc.value;
+    if (amt < Math.max(1, gross * 0.001)) { fixes.push(`סכום של ${money(amt)} בשורת התשלום הוא עיגול של הסה"כ ולא הנחה, ולכן לא נכלל בחישוב.`); dDisc = { type: "none", value: 0, onVat: "before" }; }
+  }
+  // document type
+  const kindFix = (res?.docType === "quote" && draft.kind !== "quote") ? "quote" : (res?.docType && res.docType !== "quote" && draft.kind === "quote") ? "invoice" : null;
+  if (kindFix) fixes.push(kindFix === "quote" ? "המסמך זוהה כהצעת מחיר, ולכן יישמר בלשונית הצעות מחיר ולא ישנה את העלות הנוכחית." : "המסמך זוהה כחשבונית ולא כהצעת מחיר, ולכן יישמר כחשבונית.");
+  const doubts = (res?.doubts || []).filter(t => !(kindFix && /הצעת מחיר|חשבונית/.test(t) && /ולא/.test(t)) && !(fixes.some(f => f.includes("עיגול")) && /עיגול|הנחה כללית/.test(t)));
+  draft = {
+    ...draft, kind: kindFix || draft.kind, stage: "review", busy: false, source, supplierId: supId,
+    newSupName: supId ? "" : (res?.supplierName || ""), taxId: res?.supplierTaxId || "",
+    doc: { docNo: res?.docNo || "", date: res?.date || today(), validUntil: res?.validUntil || "", pricesIncludeVat: !!res?.pricesIncludeVat, docDiscount: { ...dDisc }, printedTotal: nn(res?.totalWithVat), printedExVat: nn(res?.totalBeforeVat), lines },
+    ai: JSON.parse(JSON.stringify({ lines, pricesIncludeVat: !!res?.pricesIncludeVat, docDiscount: dDisc })),
+    templateNotes: res?.templateNotes || "", doubts, fixes, saveTemplate: true
+  };
+  render();
+}
+
+function vReview() {
+  const d = draft, doc = d.doc, isQ = d.kind === "quote";
+  const sup = S.suppliers[d.supplierId];
+  const supForCalc = sup || { rebatePct: 0 };
+  const C = computeDoc(doc, supForCalc);
+  const diff = doc.printedTotal ? C.totalWithVat - doc.printedTotal : null;
+  const totOk = diff == null || Math.abs(diff) <= Math.max(1, doc.printedTotal * 0.005);
+  const badLines = doc.lines.filter(l => lineMismatch(l, doc)).length;
+  const lineHtml = doc.lines.map((l, i) => lineCard(l, i, C, d.supplierId)).join("");
+  return `<datalist id="plist">${Object.values(S.products).map(p => `<option value="${esc(p.name)} | ${esc(p.id)}"></option>`).join("")}</datalist>
+  <div class="panel">
+    <div class="row between"><h2>בדיקת ${isQ ? "הצעת המחיר" : "החשבונית"}</h2><div class="row"><div class="seg"><button data-act="rkind" data-k="invoice" class="${!isQ ? "on" : ""}">חשבונית</button><button data-act="rkind" data-k="quote" class="${isQ ? "on" : ""}">הצעת מחיר</button></div><button class="btn ghost" data-act="cancel">ביטול</button></div></div>
+    ${d.fixes?.length ? `<div class="note"><b>המערכת תיקנה לבד:</b><br>${d.fixes.map(esc).join("<br>")}</div>` : ""}
+    <p class="small muted">${d.srcNote ? esc(d.srcNote) + " " : ""}עבור על השורות ותקן מה שצריך.</p>
+    ${!totOk || badLines ? `<div class="badbox"><b>יש כאן משהו לא תקין:</b><br>${!totOk ? `הסה"כ המחושב לא תואם לסה"כ במסמך (פער ${money(diff)}). ייתכן שחסרה שורה או דף, או שמספר נקרא לא נכון.<br>` : ""}${badLines ? `${badLines} שורות לא מסתכמות (כמות × מחיר − הנחה לא שווה לסה"כ השורה). הן מסומנות באדום למטה.` : ""}</div>` : ""}
+    ${d.doubts?.length ? (totOk && !badLines ? `<details class="warnbox"><summary>הערות של Claude (${d.doubts.length}) · כל הסכומים תואמים, אין חובה לבדוק</summary><div style="margin-top:6px">${d.doubts.map(esc).join("<br>")}</div></details>` : `<div class="warnbox"><b>הערות של Claude, לבדיקה:</b><br>${d.doubts.map(esc).join("<br>")}</div>`) : ""}
+    <div class="grid">
+      <label class="fld">ספק<select id="rSup">${supOptions(d.supplierId, false)}<option value="" ${!d.supplierId ? "selected" : ""}>ספק חדש…</option></select></label>
+      ${!d.supplierId ? `<label class="fld">שם הספק החדש<input id="rSupName" value="${esc(d.newSupName)}"></label>` : ""}
+      <label class="fld">מספר מסמך<input id="rNo" value="${esc(doc.docNo)}"></label>
+      <label class="fld">תאריך<input id="rDate" type="date" value="${esc(doc.date)}"></label>
+      ${isQ ? `<label class="fld">בתוקף עד<input id="rValid" type="date" value="${esc(doc.validUntil)}"></label>` : ""}
+    </div>
+    <div class="grid">
+      <label class="fld">המחירים בשורות<select id="rVat"><option value="0" ${!doc.pricesIncludeVat ? "selected" : ""}>לפני מע"מ</option><option value="1" ${doc.pricesIncludeVat ? "selected" : ""}>כולל מע"מ</option></select></label>
+      <label class="fld">הנחה כללית<select id="rDT"><option value="none">אין</option><option value="pct" ${doc.docDiscount.type === "pct" ? "selected" : ""}>אחוז</option><option value="amount" ${doc.docDiscount.type === "amount" ? "selected" : ""}>סכום ₪</option></select></label>
+      ${doc.docDiscount.type !== "none" ? `<label class="fld">ערך ההנחה<input id="rDV" type="number" step="any" value="${doc.docDiscount.value}"></label>
+      <label class="fld">ההנחה נלקחת<select id="rDO"><option value="before">לפני מע"מ</option><option value="after" ${doc.docDiscount.onVat === "after" ? "selected" : ""}>אחרי מע"מ</option></select></label>` : ""}
+    </div>
+    ${sup?.rebatePct ? `<p class="small muted">לספק הזה מוגדרת הנחה נוספת של ${n(sup.rebatePct)}% שלא מופיעה בחשבונית. היא נכללת בעלות האמיתית.</p>` : ""}
+    <div class="kpis">
+      <div class="kpi"><div class="k">סה"כ מחושב לפני מע"מ</div><div class="v">${money(C.totalExVat)}</div></div>
+      <div class="kpi"><div class="k">סה"כ מחושב כולל מע"מ</div><div class="v">${money(C.totalWithVat)}</div></div>
+      <div class="kpi"><div class="k">סה"כ במסמך</div><div class="v">${money(doc.printedTotal)}</div>${diff != null ? `<span class="pill ${Math.abs(diff) <= Math.max(1, doc.printedTotal * 0.005) ? "good" : "bad"}">${Math.abs(diff) <= Math.max(1, doc.printedTotal * 0.005) ? "תואם" : "פער " + money(diff)}</span>` : ""}</div>
+      ${C.docDiscPct ? `<div class="kpi"><div class="k">הנחה כללית בפועל</div><div class="v">${C.docDiscPct.toFixed(2)}%</div></div>` : ""}
+    </div>
+    ${d.mergeAsk && d.merge == null ? (() => { const ex = (isQ ? S.quotes : S.purchases).find(x => x.id === d.mergeAsk); return `<div class="warnbox stack" id="mergeBox"><b>${isQ ? "הצעת מחיר" : "חשבונית"} מספר ${esc(doc.docNo)} מהספק הזה כבר נשמרה (${(ex?.lines || []).length} שורות, ${fmtDate(ex?.date)}).</b><span>אם זה דף נוסף של אותו מסמך, צרף את השורות אליו.</span><div class="row"><button class="btn primary" data-act="mergeyes">צרף לקיימת</button><button class="btn" data-act="mergeno">שמור כמסמך נפרד</button></div></div>`; })() : ""}
+    <div class="row"><button class="btn primary" data-act="save">${isQ ? "שמור הצעת מחיר" : "שמור חשבונית"}</button><span class="small muted">אפשר לשמור עכשיו או אחרי מעבר על השורות.</span></div>
+  </div>
+  <div class="stack" id="lines">${lineHtml || emptyMsg("אין שורות", "הוסף שורה ידנית")}</div>
+  <div class="row"><button class="btn" data-act="addline">הוסף שורה</button></div>
+  <div class="panel">
+    ${d.templateNotes || sup ? `<label class="fld">הערות על המסמכים של הספק<textarea id="rTpl">${esc(d.templateNotes || sup?.templateNotes || "")}</textarea></label>
+    <label class="row small"><input type="checkbox" id="rSaveTpl" ${d.saveTemplate ? "checked" : ""}> לשמור לספק הזה</label>` : ""}
+    <div class="row"><button class="btn" data-act="save">${isQ ? "שמור הצעת מחיר" : "שמור חשבונית"}</button></div>
+  </div>`;
+}
+function lineMismatch(l, doc) {
+  if (!(n(l.lineTotal) > 0 && n(l.qty) > 0)) return null;
+  const calc = n(l.qty) * n(l.unitPrice) * (1 - n(l.lineDiscountPct) / 100);
+  const tol = Math.max(0.05, n(l.lineTotal) * 0.003);
+  if (Math.abs(calc - l.lineTotal) <= tol || Math.abs(calc * vatF() - l.lineTotal) <= tol || Math.abs(calc / vatF() - l.lineTotal) <= tol) return null;
+  return calc;
+}
+function lineCard(l, i, C, supId) {
+  const p = l.pid ? S.products[l.pid] : null;
+  const eff = C.eff[i];
+  const st = p ? stats(l.pid) : null;
+  const last = st?.ix.inv.find(r => r.sup === supId && r.doc !== draft.editId);
+  const ch = last && eff ? eff / last.eff - 1 : null;
+  const sell = p?.sellPrice ? n(p.sellPrice) : null;
+  const mg = sell && eff ? (sell / vatF() - eff) / (sell / vatF()) : null;
+  const target = st ? st.target : n(S.settings.margin) / 100;
+  const rec = eff ? roundPrice(eff / (1 - target) * vatF()) : null;
+  const howPill = { barcode: `<span class="pill good">זוהה לפי ברקוד</span>`, alias: `<span class="pill good">זוהה לפי שם אצל הספק</span>`, name: `<span class="pill info">זוהה לפי שם</span>`, new: `<span class="pill warn">מוצר חדש</span>`, manual: `<span class="pill good">שויך ידנית</span>` }[l.how || "new"];
+  const isFree = n(l.qty) === 0 && n(l.freeQty) > 0;
+  const bonusInfo = n(l.freeQty) > 0 && C.printedUnit[i] > 0 && eff ? ` · מחיר ברשימה ${money(C.printedUnit[i])}, בפועל ${money(eff)}` : "";
+  return `<div class="line ${isFree ? "free" : ""}" data-i="${i}">
+    <div class="row between"><div class="row" style="min-width:0;flex:1"><b style="min-width:0">${esc(l.name || "שורה ללא שם")}</b>${howPill}${isFree ? `<span class="pill good">בונוס</span>` : ""}${lineMismatch(l, draft.doc) != null ? `<span class="pill bad">השורה לא מסתכמת: במסמך ${money(l.lineTotal)}, מחושב ${money(lineMismatch(l, draft.doc))}</span>` : ""}</div><button class="btn ghost danger small" data-act="rmline" data-i="${i}">מחק</button></div>
+    <div class="lg">
+      <label class="fld">שם בחשבונית<input data-f="name" value="${esc(l.name)}"></label>
+      <label class="fld">ברקוד<input data-f="barcode" inputmode="numeric" value="${esc(l.barcode)}"></label>
+      <label class="fld">כמות בתשלום<input data-f="qty" type="number" step="any" value="${l.qty}"></label>
+      <label class="fld">בונוס חינם<input data-f="freeQty" type="number" step="any" value="${l.freeQty}"></label>
+      <label class="fld">יח' באריזה<input data-f="packSize" type="number" step="any" value="${l.packSize}"></label>
+      <label class="fld">מחיר ליחידת חשבונית<input data-f="unitPrice" type="number" step="any" value="${l.unitPrice}"></label>
+      <label class="fld">הנחת שורה %<input data-f="lineDiscountPct" type="number" step="any" value="${l.lineDiscountPct}"></label>
+    </div>
+    <label class="fld">שיוך למוצר במערכת<input data-f="link" list="plist" placeholder="${p ? "" : "חפש מוצר קיים או השאר כמוצר חדש"}" value="${p ? esc(p.name + " | " + p.id) : ""}"></label>
+    <div class="calc">
+      <span>עלות אמיתית ליחידה: <b>${money(eff)}</b> לפני מע"מ${bonusInfo}</span>
+      ${ch != null ? `<span>לעומת הפעם הקודמת: <b style="color:var(${ch > 0.0001 ? "--bad" : ch < -0.0001 ? "--good" : "--muted"})">${ch > 0 ? "+" : ""}${pct(ch)}</b></span>` : ""}
+      ${sell ? `<span>מחיר בחנות: <b>${money(sell)}</b> · רווח: <b style="color:var(${mg < target - 0.005 ? "--bad" : "--good"})">${pct(mg)}</b></span>` : ""}
+      ${rec && (!sell || mg < target - 0.005) ? `<span>מחיר מומלץ: <b>${money(rec)}</b></span>` : ""}
+    </div>
+  </div>`;
+}
+function afterReview() {
+  const d = draft, doc = d.doc;
+  const bind = (id, fn) => { const e = $("#" + id); if (e) e.onchange = () => { fn(e.value, e); render(); }; };
+  bind("rSup", v => { d.supplierId = v; d.merge = null; d.mergeAsk = null; doc.lines.forEach(l => { if (l.how !== "manual") { const m = matchLine(l, v); l.pid = m.pid; l.how = m.how; } }); });
+  const sn = $("#rSupName"); if (sn) sn.oninput = () => d.newSupName = sn.value;
+  const no = $("#rNo"); if (no) no.oninput = () => { doc.docNo = no.value; d.merge = null; d.mergeAsk = null; };
+  bind("rDate", v => doc.date = v); bind("rValid", v => doc.validUntil = v);
+  bind("rVat", v => doc.pricesIncludeVat = v === "1");
+  bind("rDT", v => doc.docDiscount.type = v); bind("rDV", v => doc.docDiscount.value = n(v)); bind("rDO", v => doc.docDiscount.onVat = v);
+  const tpl = $("#rTpl"); if (tpl) tpl.oninput = () => d.templateNotes = tpl.value;
+  const st = $("#rSaveTpl"); if (st) st.onchange = () => d.saveTemplate = st.checked;
+  $("#lines").addEventListener("change", e => {
+    const inp = e.target.closest("[data-f]"); if (!inp) return;
+    const i = +inp.closest(".line").dataset.i, l = doc.lines[i], f = inp.dataset.f;
+    if (f === "link") {
+      const v = inp.value.trim(); const id = v.includes("|") ? v.split("|").pop().trim() : "";
+      if (id && S.products[id]) { l.pid = id; l.how = "manual"; } else if (!v) { const m = matchLine({ ...l, pid: "" }, d.supplierId); l.pid = m.pid; l.how = m.how; }
+    } else if (["name", "barcode"].includes(f)) {
+      l[f] = inp.value; if (l.how !== "manual") { const m = matchLine(l, d.supplierId); l.pid = m.pid; l.how = m.how; }
+    } else l[f] = n(inp.value);
+    render();
+  });
+}
+function corrections() {
+  const out = []; const a = draft.ai; if (!a) return out;
+  const F = { qty: "כמות", freeQty: "בונוס", packSize: "יח' באריזה", unitPrice: "מחיר", lineDiscountPct: "הנחת שורה", barcode: "ברקוד" };
+  draft.doc.lines.forEach((l, i) => { const o = a.lines[i]; if (!o) return; for (const [k, lbl] of Object.entries(F)) { if (String(o[k] ?? "") !== String(l[k] ?? "")) out.push(`"${l.name}": ${lbl} נקרא ${o[k] ?? "ריק"} ותוקן ל-${l[k]}`); } });
+  if (a.pricesIncludeVat !== draft.doc.pricesIncludeVat) out.push(`המחירים ${draft.doc.pricesIncludeVat ? "כוללים" : "לא כוללים"} מע"מ`);
+  const ad = a.docDiscount || {}, dd = draft.doc.docDiscount;
+  if ((ad.type || "none") !== dd.type || n(ad.value) !== n(dd.value) || (ad.onVat || "before") !== dd.onVat) out.push(`הנחה כללית: ${dd.type === "none" ? "אין" : dd.value + (dd.type === "pct" ? "%" : " ₪") + (dd.onVat === "after" ? " אחרי מע\"מ" : " לפני מע\"מ")}`);
+  return out.slice(0, 10);
+}
+async function saveDraft() {
+  if (!db) { toast("שמירה לא זמינה בתצוגה הזו"); return; }
+  const d = draft, doc = d.doc, isQ = d.kind === "quote";
+  if (!doc.lines.length) { toast("אין שורות לשמירה"); return; }
+  const coll = isQ ? S.quotes : S.purchases;
+  const no = String(doc.docNo || "").trim();
+  if (!d.editId && no && d.supplierId && d.merge == null) {
+    const dig = v => String(v || "").replace(/\D/g, "") || String(v || "").trim();
+    const ex = coll.find(x => x.supplierId === d.supplierId && dig(x.docNo) === dig(no));
+    if (ex) { d.mergeAsk = ex.id; render(); document.getElementById("mergeBox")?.scrollIntoView({ block: "center" }); return; }
+  }
+  const mergeDoc = d.merge && d.mergeAsk ? coll.find(x => x.id === d.mergeAsk) : null;
+  const btn = document.querySelector('[data-act="save"]'); if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> שומר…`; }
+  try {
+    let supId = d.supplierId;
+    if (!supId) { const name = (d.newSupName || "").trim() || "ספק חדש"; supId = "s-" + uid(); S.suppliers[supId] = { id: supId, name, taxId: d.taxId || "", rebatePct: 0 }; }
+    const sup = { ...S.suppliers[supId] };
+    if (d.saveTemplate && d.templateNotes) sup.templateNotes = d.templateNotes;
+    if (d.saveTemplate && d.source === "ai") { const c = corrections(); if (c.length) sup.corrections = [...(sup.corrections || []), ...c].slice(-30); }
+    if (d.excelMap) sup.excelMap = d.excelMap;
+    if (d.pdfMap) sup.pdfMap = { ...d.pdfMap, pricesIncludeVat: !!doc.pricesIncludeVat };
+    else if (d.source === "ai" && d.pdfTable?.header) { const m = learnPdfMap(d.pdfTable, doc.lines); if (m) sup.pdfMap = { ...m, pricesIncludeVat: !!doc.pricesIncludeVat }; }
+    if (!sup.taxId && d.taxId) sup.taxId = d.taxId;
+    sup.lastDoc = doc.date; delete sup.id;
+    await put("suppliers/" + supId, sup);
+    // products
+    const calc = mergeDoc ? { ...doc, date: mergeDoc.date || doc.date, lines: [...(mergeDoc.lines || []).map(l => ({ ...l })), ...doc.lines], docDiscount: doc.docDiscount?.type && doc.docDiscount.type !== "none" ? doc.docDiscount : (mergeDoc.docDiscount || doc.docDiscount) } : doc;
+    const C = computeDoc(calc, { ...sup });
+    const lines = [];
+    for (let i = 0; i < calc.lines.length; i++) {
+      const l = { ...calc.lines[i] };
+      let pid = l.pid || cleanBarcode(l.barcode) || "n-" + uid();
+      const p = S.products[pid] ? { ...S.products[pid] } : { name: l.name, barcode: cleanBarcode(l.barcode), sellPrice: null, targetMargin: null, aliases: {}, packs: {} };
+      delete p.id;
+      p.aliases = { ...(p.aliases || {}) }; const al = new Set(p.aliases[supId] || []);
+      if (norm(l.name)) al.add(norm(l.name)); if (l.supplierCode) al.add("#" + String(l.supplierCode).trim());
+      p.aliases[supId] = [...al].slice(-8);
+      p.packs = { ...(p.packs || {}), [supId]: n(l.packSize) || 1 };
+      if (!p.barcode && cleanBarcode(l.barcode)) p.barcode = cleanBarcode(l.barcode);
+      delete p.demo;
+      await put("products/" + pid, p); S.products[pid] = { id: pid, ...p };
+      lines.push({ pid, barcode: l.barcode || "", supplierCode: l.supplierCode || "", name: l.name, qty: n(l.qty), freeQty: n(l.freeQty), packSize: n(l.packSize) || 1, unitPrice: n(l.unitPrice), lineDiscountPct: n(l.lineDiscountPct), lineTotal: l.lineTotal ?? null, eff: C.eff[i] ? +C.eff[i].toFixed(4) : null });
+    }
+    const rec = { supplierId: supId, docNo: calc.docNo, date: calc.date, pricesIncludeVat: calc.pricesIncludeVat, docDiscount: calc.docDiscount, docDiscPct: +C.docDiscPct.toFixed(3), totalExVat: +C.totalExVat.toFixed(2), totalWithVat: +(doc.printedTotal || C.totalWithVat).toFixed(2), lines, createdAt: mergeDoc?.createdAt || Date.now(), source: d.source || "manual" };
+    if (mergeDoc?.demo) rec.demo = true;
+    if (isQ) rec.validUntil = doc.validUntil || "";
+    const id = d.editId || mergeDoc?.id || uid();
+    await put((isQ ? "quotes/" : "purchases/") + id, rec);
+    const pids = [...new Set(lines.map(l => l.pid))];
+    draft = newDraft(d.kind);
+    lastSaved = { pids, isQ, supId };
+    toast(mergeDoc ? `השורות צורפו ל${isQ ? "הצעה" : "חשבונית"} ${no}` : isQ ? "הצעת המחיר נשמרה" : "החשבונית נשמרה");
+    go(isQ ? "quotes" : "alerts");
+  } catch (e) {
+    toast("השמירה נכשלה: " + (e?.code || e?.message || "")); if (btn) { btn.disabled = false; btn.textContent = "נסה לשמור שוב"; }
+  }
+}
+let lastSaved = null;
+
+/* ----- Excel ----- */
+const INV_FIELDS = { barcode: ["ברקוד", "barcode", "ean", "בר קוד"], supplierCode: ["מק\"ט", "מקט", "קוד פריט", "קוד"], name: ["תאור", "תיאור", "שם פריט", "שם מוצר", "פריט", "מוצר", "שם"], qty: ["כמות", "כמ'", "qty"], freeQty: ["בונוס", "מתנה", "חינם"], packSize: ["יח' באריזה", "באריזה", "אריזה", "קרטון"], unitPrice: ["מחיר יח", "מחיר ליח", "מחיר", "price"], lineDiscountPct: ["הנחה", "% הנחה"], lineTotal: ["סה\"כ", "סהכ", "total", "סכום"] };
+const POS_FIELDS = { barcode: ["ברקוד", "barcode", "ean", "בר קוד"], name: ["שם", "תאור", "תיאור", "פריט", "מוצר"], sellPrice: ["מחיר מכירה", "מחיר לצרכן", "מחיר", "price"] };
+const FIELD_LBL = { barcode: "ברקוד", supplierCode: "מק\"ט ספק", name: "שם המוצר", qty: "כמות", freeQty: "בונוס", packSize: "יח' באריזה", unitPrice: "מחיר ליחידה", lineDiscountPct: "הנחה %", lineTotal: "סה\"כ שורה", sellPrice: "מחיר מכירה לצרכן" };
+async function loadExcel(file, mode) {
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" }).filter(r => r.some(c => String(c).trim() !== ""));
+    const F = mode === "pos" ? POS_FIELDS : INV_FIELDS;
+    let headerRow = 0, best = -1;
+    rows.slice(0, 15).forEach((r, i) => { const sc = r.filter(c => Object.values(F).flat().some(k => norm(c).includes(norm(k)))).length; if (sc > best) { best = sc; headerRow = i; } });
+    const state = { mode, rows, headerRow, cols: guessCols(rows[headerRow], F), fname: file.name };
+    if (mode === "invoice") {
+      const sig = rows[headerRow].map(norm).join("|");
+      if (!draft.supplierId) { const m = Object.values(S.suppliers).find(s => s.excelMap?.sig === sig); if (m) draft.supplierId = m.id; }
+      const sup = S.suppliers[draft.supplierId];
+      if (sup?.excelMap && sup.excelMap.sig === sig) { state.cols = sup.excelMap.cols; applyExcel(state, true); return; }
+      draft = { ...draft, stage: "map", map: state };
+      go("inbox"); render();
+    } else { posMap = state; render(); }
+  } catch (e) { toast("לא הצלחתי לקרוא את הקובץ. ודא שזה אקסל או CSV."); }
+}
+function guessCols(head, F) {
+  const cols = {}; const used = new Set();
+  for (const [f, keys] of Object.entries(F)) {
+    let found = -1;
+    for (const k of keys) { found = head.findIndex((h, i) => !used.has(i) && norm(h).includes(norm(k))); if (found >= 0) break; }
+    if (found >= 0) { cols[f] = found; used.add(found); } else cols[f] = -1;
+  }
+  return cols;
+}
+function mapUI(state, F) {
+  const head = state.rows[state.headerRow] || [];
+  const colOpts = sel => `<option value="-1">— אין —</option>` + head.map((h, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>עמודה ${i + 1}: ${esc(String(h).slice(0, 24))}</option>`).join("");
+  const prev = state.rows.slice(state.headerRow + 1, state.headerRow + 6);
+  return `<div class="grid"><label class="fld">שורת הכותרות<input type="number" min="1" id="mHead" value="${state.headerRow + 1}"></label>
+    ${Object.keys(F).map(f => `<label class="fld">${FIELD_LBL[f]}<select data-mf="${f}">${colOpts(state.cols[f])}</select></label>`).join("")}</div>
+    <div class="tbl"><table><thead><tr>${Object.keys(F).map(f => `<th>${FIELD_LBL[f]}</th>`).join("")}</tr></thead><tbody>${prev.map(r => `<tr>${Object.keys(F).map(f => `<td>${esc(state.cols[f] >= 0 ? r[state.cols[f]] : "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function bindMap(state, F) {
+  const h = $("#mHead"); if (h) h.onchange = () => { state.headerRow = Math.max(0, n(h.value) - 1); state.cols = guessCols(state.rows[state.headerRow] || [], F); render(); };
+  document.querySelectorAll("[data-mf]").forEach(s => s.onchange = () => { state.cols[s.dataset.mf] = +s.value; render(); });
+}
+function vExcelMap() {
+  const st = draft.map;
+  return `<div class="panel"><div class="row between"><h2>${st.pdf ? "עמודות ה-PDF" : "מיפוי עמודות"}: ${esc(st.fname)}</h2><button class="btn ghost" data-act="cancel">ביטול</button></div>
+  <p class="muted">סמן איזו עמודה היא מה.</p>
+  ${mapUI(st, INV_FIELDS)}
+  <div class="row"><button class="btn primary" data-act="applyxls">המשך לבדיקה</button></div></div>`;
+}
+function afterMap() { bindMap(draft.map, INV_FIELDS); }
+function applyExcel(st, auto) {
+  const get = (r, f) => st.cols[f] >= 0 ? r[st.cols[f]] : "";
+  const lines = st.rows.slice(st.headerRow + 1).map(r => ({ barcode: String(get(r, "barcode") || ""), supplierCode: String(get(r, "supplierCode") || ""), name: String(get(r, "name") || ""), qty: n(get(r, "qty")), freeQty: n(get(r, "freeQty")), packSize: n(get(r, "packSize")) || 1, unitPrice: n(get(r, "unitPrice")), lineDiscountPct: n(get(r, "lineDiscountPct")), lineTotal: nn(get(r, "lineTotal")) })).filter(l => l.name && (l.qty || l.freeQty));
+  // bonus written as negative price / zero price rows stay as free lines
+  lines.forEach(l => { if (l.unitPrice === 0 && l.qty > 0 && !l.freeQty) { l.freeQty = l.qty; l.qty = 0; } });
+  const sig = (st.rows[st.headerRow] || []).map(norm).join("|");
+  const keepSup = draft.supplierId;
+  startReview({ ...(st.meta || {}), lines, date: st.meta?.date || today() }, st.pdf ? (auto ? "pdf" : "pdfmap") : "excel");
+  draft.supplierId = keepSup || draft.supplierId;
+  if (st.pdf) draft.pdfMap = { sig, cols: st.cols }; else draft.excelMap = { headerRow: st.headerRow, cols: st.cols, sig };
+  draft.doubts = [];
+  draft.srcNote = st.pdf ? (auto ? "נקרא לפי התבנית השמורה של הספק, בלי Claude." : "נקרא מה-PDF לפי מיפוי העמודות, בלי Claude.") : (auto ? "נקרא לפי מיפוי האקסל השמור של הספק." : "");
+  render();
+}
+
+/* ---------- ALERTS ---------- */
+function vAlerts() {
+  const A = allAlerts();
+  const focus = lastSaved ? A.filter(a => lastSaved.pids.includes(a.pid)) : [];
+  const rest = lastSaved ? A.filter(a => !lastSaved.pids.includes(a.pid)) : A;
+  const card = a => `<div class="alert ${a.sev}"><div class="sv"></div><div class="bd">
+    <div class="row between"><b>${esc(a.s.p.name)}</b><span class="pill ${a.sev}">${{ margin: "רווחיות נמוכה", up: "עליית מחיר", cheaper: "ספק זול יותר", noprice: "חסר מחיר מכירה" }[a.t]}</span></div>
+    <p>${esc(a.txt)}</p>
+    <div class="row">${(a.t === "margin" || a.t === "noprice") && a.s.rec ? `<button class="btn primary" data-act="setprice" data-pid="${esc(a.pid)}" data-v="${a.s.rec}">עדכן ל-${money(a.s.rec)}</button>` : ""}<button class="btn" data-act="openprod" data-pid="${esc(a.pid)}">פרטי מוצר</button></div>
+  </div></div>`;
+  const pending = S.changes.filter(c => !c.exported);
+  return `${demoNote()}
+  ${lastSaved ? `<div class="panel"><h2>המסמך נשמר</h2><p>${focus.length ? `נמצאו ${focus.length} נקודות לבדיקה במוצרים מהמסמך הזה:` : "לא נמצאו בעיות במוצרים מהמסמך הזה. המחירים והרווחיות תקינים."}</p>${focus.map(card).join("")}<div class="row"><button class="btn" data-act="newdoc">קלוט מסמך נוסף</button><button class="btn ghost" data-act="clearlast">סגור</button></div></div>` : ""}
+  ${pending.length ? `<div class="panel"><div class="row between"><h3>${pending.length} מחירים לעדכן בקופה</h3><button class="btn" data-act="exportchanges">הורד רשימה לאקסל</button></div><p class="small muted">${pending.slice(0, 6).map(c => `${esc(c.name)}: ${money(c.old)} ← ${money(c.new)}`).join(" · ")}${pending.length > 6 ? " ·…" : ""}</p></div>` : ""}
+  <div class="row between"><h2>${lastSaved ? "שאר ההתראות" : "התראות"}</h2><span class="small muted">${rest.length} פתוחות</span></div>
+  ${rest.length ? rest.map(card).join("") : emptyMsg("אין התראות", "כשמחיר ספק יעלה, כשהרווח יירד מתחת ליעד או כשספק אחר זול יותר, זה יופיע כאן.")}`;
+}
+
+/* ---------- PRODUCTS ---------- */
+let pq = "", psort = "status";
+function vProducts() {
+  let P = Object.values(S.products).map(p => ({ p, s: stats(p.id) }));
+  if (pq) { const q = norm(pq); P = P.filter(x => norm(x.p.name).includes(q) || x.p.id.includes(pq) || (x.p.barcode || "").includes(pq)); }
+  const sev = x => x.s.alerts.some(a => a.sev === "bad") ? 0 : x.s.alerts.some(a => a.sev === "warn") ? 1 : x.s.alerts.length ? 2 : 3;
+  P.sort((a, b) => psort === "status" ? sev(a) - sev(b) || a.p.name.localeCompare(b.p.name, "he") : psort === "margin" ? (a.s.margin ?? 9) - (b.s.margin ?? 9) : a.p.name.localeCompare(b.p.name, "he"));
+  return `${demoNote()}
+  ${posMap ? vPosMap() : ""}
+  <div class="row between"><h2>מוצרים</h2><div class="row"><button class="btn" data-act="addprod">מוצר חדש</button><button class="btn" data-act="pos">ייבוא מחירים מהקופה</button><button class="btn" data-act="exportprods">ייצוא לאקסל</button></div></div>
+  <div class="row"><input id="pq" placeholder="חיפוש לפי שם או ברקוד" value="${esc(pq)}" style="flex:1;min-width:180px"><select id="psort"><option value="status">לפי דחיפות</option><option value="margin" ${psort === "margin" ? "selected" : ""}>לפי רווח (נמוך קודם)</option><option value="name" ${psort === "name" ? "selected" : ""}>לפי שם</option></select></div>
+  ${P.length ? `<div class="list"><div class="li head"><span>מוצר</span><span>עלות אמיתית</span><span>ספק זול ביותר</span><span>מחיר בחנות</span><span>רווח</span><span></span></div>
+  ${P.map(({ p, s }) => `<div class="li click" data-act="openprod" data-pid="${esc(p.id)}"><div class="nm"><b>${esc(p.name)}</b><span class="small muted num">${esc(p.barcode || "ללא ברקוד")}</span></div>
+    <span class="c num" data-l="עלות: ">${money(s.cost)}</span>
+    <span class="c" data-l="הכי זול: ">${s.best ? `${esc(supName(s.best.sup))} <span class="num">${money(s.best.eff)}</span>` : "—"}</span>
+    <span class="c num" data-l="מחיר: ">${money(s.sell)}</span>
+    <span class="c num" data-l="רווח: " style="color:var(${s.margin == null ? "--muted" : s.margin < s.target - 0.005 ? "--bad" : "--good"})">${pct(s.margin)}</span>
+    <span>${s.alerts.length ? `<span class="pill ${s.alerts[0].sev}">${s.alerts.length} התראות</span>` : p.demo ? `<span class="pill demo">דוגמה</span>` : `<span class="pill good">תקין</span>`}</span></div>`).join("")}</div>` : emptyMsg("אין עדיין מוצרים", "מוצרים נוצרים אוטומטית מקליטת חשבוניות, מייבוא מחירי הקופה או בהוספה ידנית.")}`;
+}
+after.products = () => {
+  const q = $("#pq"); if (q) q.oninput = () => { pq = q.value; const pos = q.selectionStart; render(); const q2 = $("#pq"); q2.focus(); q2.setSelectionRange(pos, pos); };
+  const s = $("#psort"); if (s) s.onchange = () => { psort = s.value; render(); };
+  if (posMap) bindMap(posMap, POS_FIELDS);
+};
+function vPosMap() {
+  return `<div class="panel"><div class="row between"><h3>ייבוא מחירי מכירה: ${esc(posMap.fname)}</h3><button class="btn ghost" data-act="posclose">ביטול</button></div>
+  <p class="small muted">יצוא מהקופה עם ברקוד ומחיר לצרכן (כולל מע"מ). מוצרים קיימים יתעדכנו, וחדשים ייווצרו.</p>
+  ${mapUI(posMap, POS_FIELDS)}<div class="row"><button class="btn primary" data-act="posapply">ייבא ${posMap.rows.length - posMap.headerRow - 1} שורות</button></div></div>`;
+}
+async function applyPos() {
+  const st = posMap; const g = (r, f) => st.cols[f] >= 0 ? r[st.cols[f]] : "";
+  let up = 0, nw = 0;
+  const btn = document.querySelector('[data-act="posapply"]'); if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> מייבא…`; }
+  for (const r of st.rows.slice(st.headerRow + 1)) {
+    const bc = cleanBarcode(g(r, "barcode")); const price = nn(g(r, "sellPrice")); const name = String(g(r, "name") || "").trim();
+    if (!bc || !price) continue;
+    const ex = S.products[bc];
+    if (ex) { if (n(ex.sellPrice) === price) continue; const p = { ...ex, sellPrice: price }; delete p.id; await put("products/" + bc, p); up++; }
+    else { await put("products/" + bc, { name: name || bc, barcode: bc, sellPrice: price, targetMargin: null, aliases: {}, packs: {} }); nw++; }
+  }
+  posMap = null; toast(`עודכנו ${up} מחירים, נוספו ${nw} מוצרים`); render();
+}
+
+function prodModal(pid) {
+  const isNew = !pid; const p = isNew ? { name: "", barcode: "", sellPrice: "", targetMargin: "", category: "" } : S.products[pid];
+  const s = isNew ? null : stats(pid);
+  const hist = s ? s.ix.inv.slice(0, 12) : [];
+  const offers = s ? [...s.offers].sort((a, b) => a.eff - b.eff) : [];
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+    <div class="row between"><h2>${isNew ? "מוצר חדש" : esc(p.name)}</h2><button class="btn ghost" data-x>סגור</button></div>
+    <div class="grid">
+      <label class="fld">שם<input id="mName" value="${esc(p.name)}"></label>
+      <label class="fld">ברקוד<input id="mBc" inputmode="numeric" value="${esc(p.barcode || "")}" ${isNew ? "" : "disabled"}></label>
+      <label class="fld">מחיר מכירה לצרכן (כולל מע"מ)<input id="mSell" type="number" step="any" value="${p.sellPrice ?? ""}"></label>
+      <label class="fld">יעד רווח % (ריק = ברירת מחדל ${n(S.settings.margin)}%)<input id="mTarget" type="number" step="any" value="${p.targetMargin ?? ""}"></label>
+      <label class="fld">קבוצה (מוצרים דומים)<input id="mGroup" list="mglist" value="${esc(p.group || "")}"><datalist id="mglist">${[...new Set(Object.values(S.products).map(x => x.group).filter(Boolean))].map(g => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
+      <label class="fld">חברה / מותג<input id="mBrand" value="${esc(p.brand || "")}"></label>
+      <label class="fld">גודל האריזה (ריק = מהשם${parseSize(p.name) ? ": " + (+parseSize(p.name).amount.toFixed(3)) + " " + unitLbl(parseSize(p.name).unit) : ""})<span class="row" style="gap:6px;flex-wrap:nowrap"><input id="mSize" type="number" step="any" value="${p.sizeAmount ?? ""}" style="flex:1"><select id="mSizeU"><option value="kg">ק"ג</option><option value="l" ${p.sizeUnit === "l" ? "selected" : ""}>ליטר</option></select></span></label>
+    </div>
+    ${s?.cost ? `<div class="kpis"><div class="kpi"><div class="k">עלות אמיתית אחרונה</div><div class="v">${money(s.cost)}</div></div><div class="kpi"><div class="k">רווח כרגע</div><div class="v">${pct(s.margin)}</div></div><div class="kpi"><div class="k">מחיר מומלץ ליעד</div><div class="v">${money(s.rec)}</div></div></div>` : ""}
+    ${s?.alerts.length ? s.alerts.map(a => `<div class="alert ${a.sev}"><div class="sv"></div><div class="bd small">${esc(a.txt)}</div></div>`).join("") : ""}
+    ${offers.length ? `<h3>השוואת ספקים</h3><div class="tbl"><table><thead><tr><th>ספק</th><th>מקור</th><th>תאריך</th><th>מחיר בחשבונית</th><th>בונוס</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${offers.map((o, i) => `<tr><td>${esc(supName(o.sup))}</td><td>${o.kind === "q" ? "הצעת מחיר" : "חשבונית"}</td><td>${fmtDate(o.date)}</td><td class="num">${money(o.unitPrice)}${o.pack > 1 ? ` / ${o.pack} יח'` : ""}${o.disc ? ` −${o.disc}%` : ""}</td><td class="num">${o.free ? `${o.qty}+${o.free}` : "—"}</td><td class="num ${i === 0 && offers.length > 1 ? "best" : ""}">${money(o.eff)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${hist.length ? `<details><summary>היסטוריית קניות (${s.ix.inv.length})</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>תאריך</th><th>ספק</th><th>כמות</th><th>עלות ליח'</th></tr></thead><tbody>${hist.map(r => `<tr><td>${fmtDate(r.date)}</td><td>${esc(supName(r.sup))}</td><td class="num">${r.qty}${r.free ? "+" + r.free : ""}${r.pack > 1 ? " ×" + r.pack : ""}</td><td class="num">${money(r.eff)}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
+    <div class="row between"><button class="btn primary" data-save>שמור</button>${!isNew ? `<button class="btn ghost danger" data-del>מחק מוצר</button>` : ""}</div>
+    <div class="warnbox" data-confirm hidden>למחוק את המוצר? ההיסטוריה בחשבוניות נשארת. <button class="btn danger" data-delyes>כן, מחק</button></div>
+  </div>`;
+  document.body.append(bg);
+  const close = () => bg.remove();
+  bg.addEventListener("click", async e => {
+    if (e.target === bg || e.target.closest("[data-x]")) close();
+    if (e.target.closest("[data-del]")) bg.querySelector("[data-confirm]").hidden = false;
+    if (e.target.closest("[data-delyes]")) { await del("products/" + pid); close(); toast("המוצר נמחק"); }
+    if (e.target.closest("[data-save]")) {
+      const name = $("#mName", bg).value.trim(); if (!name) { toast("חסר שם"); return; }
+      const id = isNew ? (cleanBarcode($("#mBc", bg).value) || "n-" + uid()) : pid;
+      const np = isNew ? { name, barcode: cleanBarcode($("#mBc", bg).value), aliases: {}, packs: {} } : { ...S.products[pid] }; delete np.id;
+      np.name = name; const old = nn(np.sellPrice); np.sellPrice = nn($("#mSell", bg).value); np.targetMargin = nn($("#mTarget", bg).value);
+      np.group = $("#mGroup", bg).value.trim(); np.brand = $("#mBrand", bg).value.trim(); np.sizeAmount = nn($("#mSize", bg).value); np.sizeUnit = $("#mSizeU", bg).value;
+      await put("products/" + id, np);
+      if (!isNew && old !== np.sellPrice && np.sellPrice) await logChange(id, name, old, np.sellPrice);
+      close(); toast("נשמר");
+    }
+  });
+}
+async function logChange(pid, name, old, nw) { await put("pricechanges/" + uid(), { pid, name, barcode: S.products[pid]?.barcode || "", old: old ?? null, new: nw, at: Date.now(), exported: false }); }
+async function setPrice(pid, v) {
+  const p = { ...S.products[pid] }; const old = nn(p.sellPrice); delete p.id; p.sellPrice = v;
+  await put("products/" + pid, p); await logChange(pid, p.name, old, v); toast(`המחיר עודכן ל-${money(v)}. זכור לעדכן גם בקופה.`);
+}
+
+
+/* ---------- COMPARE similar products (groups) ---------- */
+let groupSug = null, groupBusy = false;
+const sizeOf = p => (p.sizeAmount > 0 ? { amount: n(p.sizeAmount), unit: p.sizeUnit || "kg" } : parseSize(p.name));
+const unitLbl = u => u === "l" ? "ליטר" : "ק\"ג";
+function vCompare() {
+  const P = Object.values(S.products);
+  const groups = {}; for (const p of P) if (p.group) (groups[p.group] ||= []).push(p);
+  const ungrouped = P.filter(p => !p.group);
+  const glist = Object.keys(groups).sort((a, b) => a.localeCompare(b, "he"));
+  const card = g => {
+    const rows = groups[g].map(p => { const s = stats(p.id); const sz = sizeOf(p); const best = s.best?.eff ?? s.cost; const perStd = best && sz ? best / sz.amount : null; const sellStd = s.sell && sz ? s.sell / sz.amount : null; return { p, s, sz, best, perStd, sellStd }; });
+    const std = rows.every(r => r.perStd != null) && new Set(rows.map(r => r.sz.unit)).size === 1;
+    const key = r => std ? r.perStd : r.best;
+    rows.sort((a, b) => (key(a) ?? 1e12) - (key(b) ?? 1e12));
+    const top = rows.find(r => key(r) != null), second = rows.filter(r => key(r) != null)[1];
+    const u = std ? unitLbl(rows[0].sz.unit) : "יחידה";
+    return `<div class="panel"><div class="row between"><h3>${esc(g)}</h3><span class="small muted">${rows.length === 1 ? "מוצר אחד" : rows.length + " מוצרים"} · השוואה ל${u}</span></div>
+      ${top && second ? `<p>הכי משתלם: <b>${esc(top.p.brand || top.p.name)}</b> · ${money(key(top))} ל${u}, זול ב-${pct(1 - key(top) / key(second))} מ${esc(second.p.brand || second.p.name)}.</p>` : ""}
+      <div class="tbl"><table><thead><tr><th>מוצר</th><th>חברה</th><th>גודל</th><th>ספק זול</th><th>עלות ליח'</th>${std ? `<th>עלות ל${u}</th>` : ""}<th>מחיר בחנות</th>${std ? `<th>מחיר ל${u}</th>` : ""}<th>רווח</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td><button class="btn ghost" data-act="openprod" data-pid="${esc(r.p.id)}">${esc(r.p.name)}</button></td><td>${esc(r.p.brand || "—")}</td><td class="num">${r.sz ? (r.sz.amount < 1 ? Math.round(r.sz.amount * 1000) + (r.sz.unit === "l" ? " מ\"ל" : " גרם") : r.sz.amount + " " + unitLbl(r.sz.unit)) : "—"}</td><td>${r.s.best ? esc(supName(r.s.best.sup)) : "—"}</td><td class="num">${money(r.best)}</td>${std ? `<td class="num ${r === top ? "best" : ""}">${money(r.perStd)}</td>` : ""}<td class="num">${money(r.s.sell)}</td>${std ? `<td class="num">${money(r.sellStd)}</td>` : ""}<td class="num" style="color:var(${r.s.margin == null ? "--muted" : r.s.margin < r.s.target - 0.005 ? "--bad" : "--good"})">${pct(r.s.margin)}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  };
+  return `${demoNote()}
+  <div class="row between"><h2>מוצרים דומים</h2>${ungrouped.length ? `<button class="btn primary" data-act="suggestgroups" ${groupBusy ? "disabled" : ""}>${groupBusy ? `<span class="spin"></span> מסדר לקבוצות…` : `סדר ${ungrouped.length} מוצרים לקבוצות`}</button>` : ""}</div>
+  <p class="muted">מוצרים מאותו סוג מחברות שונות, למשל שוקולד חלב של כמה יצרנים. ההשוואה לפי מחיר לק"ג או לליטר, כך שגם אריזות בגדלים שונים מושוות נכון.</p>
+  ${groupSug ? `<div class="panel"><h3>הצעה לקבוצות</h3><p class="small muted">בטל סימון של מה שלא מתאים, ואפשר לשנות את שם הקבוצה.</p>
+    <div class="stack">${groupSug.map((g, i) => `<label class="row small" style="align-items:flex-start"><input type="checkbox" data-gs="${i}" checked> <span style="flex:1;min-width:0"><b>${esc(S.products[g.id]?.name || g.id)}</b><br><input data-gsn="${i}" value="${esc(g.group)}" style="margin-top:4px;width:100%"> <span class="muted">חברה: <input data-gsb="${i}" value="${esc(g.brand || "")}" style="width:140px"></span></span></label>`).join("")}</div>
+    <div class="row"><button class="btn primary" data-act="applygroups">שמור קבוצות</button><button class="btn ghost" data-act="cancelgroups">ביטול</button></div></div>` : ""}
+  ${glist.length ? glist.map(card).join("") : emptyMsg("עדיין אין קבוצות", "לחץ על \"סדר לקבוצות\", או קבע קבוצה לכל מוצר בחלון פרטי המוצר.")}
+  ${ungrouped.length && !groupSug ? `<details class="panel"><summary>${ungrouped.length} מוצרים בלי קבוצה</summary><div class="stack" style="margin-top:8px"><datalist id="glist">${glist.map(g => `<option value="${esc(g)}"></option>`).join("")}</datalist>${ungrouped.map(p => `<div class="row"><span style="flex:1;min-width:0">${esc(p.name)}</span><input list="glist" data-setgroup="${esc(p.id)}" placeholder="קבוצה" style="width:180px"></div>`).join("")}</div></details>` : ""}`;
+}
+after.compare = () => {
+  document.querySelectorAll("[data-setgroup]").forEach(i => i.onchange = async () => { const v = i.value.trim(); if (!v) return; const p = { ...S.products[i.dataset.setgroup] }; delete p.id; p.group = v; await put("products/" + i.dataset.setgroup, p); toast("נשמר"); });
+};
+function localGroupGuess(list) {
+  // without AI: products that share their first words (after removing sizes) go together
+  const key = nm => norm(String(nm).replace(/\d+(?:[.,]\d+)?\s*(ק"ג|קג|גרם|גר'?|ג'|ליטר|ל'|מ"ל|מל|יח'?)/g, "")).split(" ").filter(w => w.length > 1 && !/^\d/.test(w));
+  return list.map(p => { const k = key(p.name); return { id: p.id, group: k.slice(0, 2).join(" "), brand: "" }; });
+}
+async function suggestGroups() {
+  const list = Object.values(S.products).filter(p => !p.group).slice(0, 250);
+  const existing = [...new Set(Object.values(S.products).map(p => p.group).filter(Boolean))];
+  groupBusy = true; render();
+  try {
+    if (!sample) throw { code: "no_sample" };
+    const res = await sample.json(`You group a small Israeli store's products for price comparison across brands. Products of the same kind that a shopper would substitute for each other go in one group (e.g. milk chocolate bars of different brands → "שוקולד חלב"; dry adult dog food 15 kg of different brands → "מזון יבש לכלב בוגר"). Ignore package size in the group name (comparison is per kg/liter). Prefer these existing groups when they fit: ${JSON.stringify(existing)}.
+Products (id, name): ${JSON.stringify(list.map(p => [p.id, p.name]))}
+Reply with ONLY a JSON array: [{"id":string,"group":string (short Hebrew),"brand":string (manufacturer brand in Hebrew as written in the name, or "")}] covering every product.`, { modelTier: "quick", cache: false });
+    groupSug = (Array.isArray(res) ? res : []).filter(g => g && S.products[g.id] && g.group);
+  } catch (e) {
+    groupSug = localGroupGuess(list);
+    if (e?.code && e.code !== "no_sample" && e.code !== "no_key") toast("Claude לא זמין כרגע, זו הצעה פשוטה לפי שמות המוצרים");
+  }
+  groupBusy = false; render();
+}
+async function applyGroups() {
+  const sel = groupSug.map((g, i) => ({ ...g, on: document.querySelector(`[data-gs="${i}"]`)?.checked, group: document.querySelector(`[data-gsn="${i}"]`)?.value.trim(), brand: document.querySelector(`[data-gsb="${i}"]`)?.value.trim() })).filter(g => g.on && g.group);
+  for (const g of sel) { const p = { ...S.products[g.id] }; delete p.id; p.group = g.group; if (g.brand) p.brand = g.brand; await put("products/" + g.id, p); }
+  groupSug = null; toast(`${sel.length} מוצרים סודרו לקבוצות`); render();
+}
+
+/* ---------- QUOTES ---------- */
+function vQuotes() {
+  const Q = [...S.quotes].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const pids = [...new Set(Q.flatMap(q => (q.lines || []).map(l => l.pid)))].filter(p => S.products[p]);
+  const sups = [...new Set(Q.map(q => q.supplierId))];
+  const rows = pids.map(pid => {
+    const s = stats(pid);
+    const cells = sups.map(sid => s.ix.q.find(r => r.sup === sid) || null);
+    const vals = [s.cur?.eff, ...cells.map(c => c?.eff)].filter(v => v > 0);
+    const min = vals.length ? Math.min(...vals) : null;
+    return { pid, s, cells, min };
+  });
+  return `${demoNote()}
+  <div class="row between"><h2>הצעות מחיר</h2><button class="btn primary" data-act="newquote">קלוט הצעת מחיר</button></div>
+  <p class="muted">משווים כל הצעה לעלות האמיתית שאתה משלם היום, כולל בונוסים והנחות. העמודה הירוקה היא הזולה ביותר.</p>
+  ${rows.length ? `<div class="tbl"><table><thead><tr><th>מוצר</th><th>היום (${"ספק נוכחי"})</th>${sups.map(s => `<th>${esc(supName(s))}</th>`).join("")}<th>חיסכון</th><th>מחיר מומלץ</th></tr></thead><tbody>
+    ${rows.map(r => { const save = r.s.cur && r.min && r.min < r.s.cur.eff ? 1 - r.min / r.s.cur.eff : null; const recNew = r.min ? roundPrice(r.min / (1 - r.s.target) * vatF()) : null;
+      return `<tr><td><button class="btn ghost" data-act="openprod" data-pid="${esc(r.pid)}">${esc(r.s.p.name)}</button></td><td class="num ${r.s.cur && r.s.cur.eff === r.min ? "best" : ""}">${r.s.cur ? money(r.s.cur.eff) + `<br><span class="small muted">${esc(supName(r.s.cur.sup))}</span>` : "מוצר חדש"}</td>${r.cells.map(c => `<td class="num ${c && c.eff === r.min ? "best" : ""}">${c ? money(c.eff) + (c.free ? `<br><span class="small muted">${c.qty}+${c.free} בונוס</span>` : "") : "—"}</td>`).join("")}<td class="num">${save ? pct(save) : "—"}</td><td class="num">${r.s.sell ? money(r.s.sell) : money(recNew)}</td></tr>`; }).join("")}
+  </tbody></table></div>` : emptyMsg("אין עדיין הצעות מחיר", "קלוט הצעת מחיר מספק קיים או חדש, למשל למוצר חדש שרוצים להכניס לחנות.")}
+  ${Q.length ? `<h3>כל ההצעות</h3><div class="list">${Q.map(q => `<div class="li click" data-act="opendoc" data-k="q" data-id="${esc(q.id)}" style="grid-template-columns:minmax(0,1fr) auto auto"><div class="nm"><b>${esc(supName(q.supplierId))}</b><span class="small muted">${fmtDate(q.date)}${q.validUntil ? " · בתוקף עד " + fmtDate(q.validUntil) : ""} · ${(q.lines || []).length} מוצרים</span></div>${q.validUntil && q.validUntil < today() ? `<span class="pill neutral">פג תוקף</span>` : q.demo ? `<span class="pill demo">דוגמה</span>` : "<span></span>"}<span class="num">${money(q.totalWithVat)}</span></div>`).join("")}</div>` : ""}`;
+}
+
+/* ---------- SUPPLIERS ---------- */
+function vSuppliers() {
+  const L = Object.values(S.suppliers).sort((a, b) => (a.name || "").localeCompare(b.name || "", "he"));
+  return `${demoNote()}
+  <div class="row between"><h2>ספקים ותבניות</h2><button class="btn" data-act="addsup">ספק חדש</button></div>
+  ${L.length ? L.map(s => { const inv = S.purchases.filter(p => p.supplierId === s.id); const q = S.quotes.filter(p => p.supplierId === s.id);
+    return `<div class="panel" data-sup="${esc(s.id)}">
+      <div class="row between"><div><h3>${esc(s.name)}</h3><span class="small muted">${inv.length} חשבוניות · ${q.length} הצעות מחיר${s.lastDoc ? " · אחרון " + fmtDate(s.lastDoc) : ""}</span></div>
+      <div class="chips">${s.templateNotes ? `<span class="pill good">תבנית נלמדה</span>` : `<span class="pill neutral">אין תבנית</span>`}${s.excelMap ? `<span class="pill info">מיפוי אקסל</span>` : ""}${s.pdfMap ? `<span class="pill info">קריאת PDF בלי Claude</span>` : ""}${s.corrections?.length ? `<span class="pill neutral">${s.corrections.length} תיקונים</span>` : ""}${s.demo ? `<span class="pill demo">דוגמה</span>` : ""}</div></div>
+      <div class="grid"><label class="fld">שם<input data-sf="name" value="${esc(s.name)}"></label><label class="fld">ח.פ.<input data-sf="taxId" value="${esc(s.taxId || "")}"></label><label class="fld">טלפון<input data-sf="phone" value="${esc(s.phone || "")}"></label><label class="fld">הנחה נוספת שלא בחשבונית %<input data-sf="rebatePct" type="number" step="any" value="${n(s.rebatePct)}"></label></div>
+      <details><summary>תבנית וכללים</summary><div class="stack" style="margin-top:8px">
+        <label class="fld">תבנית המסמך (נלמדה מהקליטות)<textarea data-sf="templateNotes">${esc(s.templateNotes || "")}</textarea></label>
+        <label class="fld">כללים שלך לספק הזה (למשל: "בונוס תמיד מופיע בשורה נפרדת עם מחיר 0")<textarea data-sf="hints">${esc(s.hints || "")}</textarea></label>
+        ${s.corrections?.length ? `<div class="small"><b>תיקונים שנלמדו:</b><br>${s.corrections.slice(-10).map(esc).join("<br>")}<br><button class="btn ghost small" data-act="clearcorr" data-id="${esc(s.id)}">נקה תיקונים</button></div>` : ""}
+        ${s.excelMap ? `<div class="small">מיפוי אקסל שמור. <button class="btn ghost small" data-act="clearmap" data-id="${esc(s.id)}">מחק מיפוי</button></div>` : ""}
+        ${s.pdfMap ? `<div class="small">תבנית PDF שמורה: PDF מהספק הזה נקרא בלי Claude. <button class="btn ghost small" data-act="clearpdf" data-id="${esc(s.id)}">מחק תבנית PDF</button></div>` : ""}
+      </div></details>
+      <div class="row"><button class="btn" data-act="savesup" data-id="${esc(s.id)}">שמור שינויים</button><button class="btn ghost" data-act="learn" data-id="${esc(s.id)}">קלוט חשבונית מהספק</button></div>
+    </div>`; }).join("") : emptyMsg("אין עדיין ספקים", "ספק נוצר אוטומטית בקליטת החשבונית הראשונה שלו.")}`;
+}
+
+/* ---------- INVOICES ---------- */
+function vInvoices() {
+  const L = [...S.purchases].sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+  const month = today().slice(0, 7);
+  const tot = L.filter(p => (p.date || "").startsWith(month)).reduce((a, p) => a + n(p.totalWithVat), 0);
+  return `${demoNote()}<div class="row between"><h2>חשבוניות</h2><span class="muted">החודש: <b class="num">${money(tot)}</b></span></div>
+  ${L.length ? `<div class="list">${L.map(x => `<div class="li click" data-act="opendoc" data-k="inv" data-id="${esc(x.id)}" style="grid-template-columns:minmax(0,1fr) auto auto"><div class="nm"><b>${esc(supName(x.supplierId))}</b><span class="small muted">מס' ${esc(x.docNo || "—")} · ${fmtDate(x.date)} · ${(x.lines || []).length} שורות${x.source === "ai" ? " · נקרא ע\"י Claude" : x.source === "excel" ? " · אקסל" : ""}</span></div>${x.demo ? `<span class="pill demo">דוגמה</span>` : "<span></span>"}<span class="num">${money(x.totalWithVat)}</span></div>`).join("")}</div>` : emptyMsg("אין עדיין חשבוניות", "צלם חשבונית בלשונית קליטת חשבונית.")}`;
+}
+function docModal(kind, id) {
+  const x = (kind === "q" ? S.quotes : S.purchases).find(d => d.id === id); if (!x) return;
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal"><div class="row between"><h2>${esc(supName(x.supplierId))}</h2><button class="btn ghost" data-x>סגור</button></div>
+  <p class="muted">${kind === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)} · ${x.pricesIncludeVat ? "מחירים כולל מע\"מ" : "מחירים לפני מע\"מ"}${x.docDiscPct ? ` · הנחה כללית ${n(x.docDiscPct).toFixed(2)}%` : ""}</p>
+  <div class="tbl"><table><thead><tr><th>מוצר</th><th>כמות</th><th>בונוס</th><th>מחיר</th><th>הנחה</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${(x.lines || []).map(l => `<tr><td>${esc(l.name)}<br><span class="small muted num">${esc(l.barcode || "")}</span></td><td class="num">${l.qty}${l.packSize > 1 ? " ×" + l.packSize : ""}</td><td class="num">${l.freeQty || "—"}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${l.lineDiscountPct ? l.lineDiscountPct + "%" : "—"}</td><td class="num">${money(l.eff)}</td></tr>`).join("")}</tbody></table></div>
+  <div class="row"><span>סה"כ: <b class="num">${money(x.totalWithVat)}</b></span></div>
+  <div class="row between"><button class="btn" data-edit>פתח לעריכה</button><button class="btn ghost danger" data-del>מחק</button></div>
+  <div class="warnbox" data-confirm hidden>למחוק את המסמך? העלויות שלו יוסרו מההשוואות. <button class="btn danger" data-delyes>כן, מחק</button></div></div>`;
+  document.body.append(bg);
+  bg.addEventListener("click", async e => {
+    if (e.target === bg || e.target.closest("[data-x]")) bg.remove();
+    if (e.target.closest("[data-del]")) bg.querySelector("[data-confirm]").hidden = false;
+    if (e.target.closest("[data-delyes]")) { await del((kind === "q" ? "quotes/" : "purchases/") + id); bg.remove(); toast("נמחק"); }
+    if (e.target.closest("[data-edit]")) {
+      bg.remove();
+      draft = { ...newDraft(kind === "q" ? "quote" : "invoice"), stage: "review", source: x.source || "manual", editId: id, supplierId: x.supplierId, newSupName: "", saveTemplate: false, templateNotes: "", doubts: [],
+        doc: { docNo: x.docNo || "", date: x.date || today(), validUntil: x.validUntil || "", pricesIncludeVat: !!x.pricesIncludeVat, docDiscount: x.docDiscount || { type: "none", value: 0, onVat: "before" }, printedTotal: x.totalWithVat, lines: (x.lines || []).map(l => ({ ...l, how: "manual" })) }, ai: null };
+      go("inbox"); render();
+    }
+  });
+}
+
+/* ---------- SETTINGS ---------- */
+function vSetup() {
+  const s = S.settings; const hasDemo = [...Object.values(S.products), ...Object.values(S.suppliers), ...S.purchases, ...S.quotes].some(x => x.demo);
+  return `<div class="panel"><h2>הגדרות החנות</h2>
+  <div class="grid">
+    <label class="fld">מע"מ %<input id="sVat" type="number" step="any" value="${s.vat}"></label>
+    <label class="fld">יעד רווח גולמי ברירת מחדל %<input id="sMargin" type="number" step="any" value="${s.margin}"></label>
+    <label class="fld">עיגול מחיר מומלץ<select id="sRound"><option value="90" ${s.rounding === "90" ? "selected" : ""}>ל-90 אגורות (9.90)</option><option value="int" ${s.rounding === "int" ? "selected" : ""}>לשקל שלם</option><option value="10ag" ${s.rounding === "10ag" ? "selected" : ""}>ל-10 אגורות</option><option value="none" ${s.rounding === "none" ? "selected" : ""}>בלי עיגול</option></select></label>
+    <label class="fld">התראה על עליית מחיר מעל %<input id="sAlert" type="number" step="any" value="${s.alertPct}"></label>
+    <label class="fld">להציג ספק זול יותר מעל % חיסכון<input id="sCheap" type="number" step="any" value="${s.cheaperPct}"></label>
+  </div>
+  <p class="small muted">רווח גולמי מחושב מהמחיר לצרכן לפני מע"מ: (מחיר לפני מע"מ − עלות אמיתית) ÷ מחיר לפני מע"מ.</p>
+  <div class="row"><button class="btn primary" data-act="savesettings">שמור הגדרות</button></div></div>
+  ${hasDemo ? `<div class="panel"><h3>נתוני דוגמה</h3><p class="muted">המערכת מגיעה עם כמה מוצרים, ספקים וחשבוניות לדוגמה כדי להראות איך היא עובדת. מחק אותם לפני שמתחילים לעבוד.</p><div class="row"><button class="btn danger" data-act="deldemo">מחק נתוני דוגמה</button></div><div class="warnbox" id="demoConfirm" hidden>כל הנתונים המסומנים "דוגמה" יימחקו. <button class="btn danger" data-act="deldemoyes">כן, מחק</button></div></div>` : ""}
+  ${window.LOCAL ? LOCAL.panel() : ""}<div class="panel"><h3>חיבור לקופה</h3><p class="muted">כרגע מחירי המכירה נכנסים מייצוא אקסל של הקופה (לשונית מוצרים) או בהקלדה. אם לקופה יש ממשק API אפשר לחבר אותה כך שהמחירים יתעדכנו לבד.</p></div>`;
+}
+
+/* ---------- export ---------- */
+async function saveXlsx(filename, rows) {
+  if (!downloads) { toast("הורדת קבצים לא זמינה בתצוגה הזו"); return false; }
+  const ws = XLSX.utils.aoa_to_sheet(rows); ws["!cols"] = rows[0].map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] }; XLSX.utils.book_append_sheet(wb, ws, "גיליון1");
+  const data = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  try { await downloads.save({ filename, data: new Uint8Array(data) }); return true; } catch (e) { if (e?.code !== "declined") toast("ההורדה נכשלה"); return false; }
+}
+
+/* ---------- actions ---------- */
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act;
+  switch (a) {
+    case "kind": draft.kind = b.dataset.k; render(); break;
+    case "cam": openCam(); break;
+    case "img": $("#fImg").click(); break;
+    case "xls": $("#fXls").click(); break;
+    case "pos": $("#fPos").click(); break;
+    case "rmfile": draft.files.splice(+b.dataset.i, 1); render(); break;
+    case "read": readDoc(); break;
+    case "readlocal": readLocal(false); break;
+    case "stop": readCtl?.abort(); break;
+    case "manual": startReview({ lines: [{ name: "", qty: 1, unitPrice: 0 }], date: today() }, "manual"); break;
+    case "cancel": draft = newDraft(draft?.kind); render(); break;
+    case "addline": draft.doc.lines.push({ name: "", barcode: "", qty: 1, freeQty: 0, packSize: 1, unitPrice: 0, lineDiscountPct: 0, pid: "", how: "new" }); render(); break;
+    case "rmline": draft.doc.lines.splice(+b.dataset.i, 1); if (draft.ai) draft.ai.lines.splice(+b.dataset.i, 1); render(); break;
+    case "save": saveDraft(); break;
+    case "suggestgroups": suggestGroups(); break;
+    case "applygroups": applyGroups(); break;
+    case "cancelgroups": groupSug = null; render(); break;
+    case "rkind": draft.kind = b.dataset.k; draft.merge = null; draft.mergeAsk = null; render(); break;
+    case "mergeyes": draft.merge = true; saveDraft(); break;
+    case "mergeno": draft.merge = false; saveDraft(); break;
+    case "applyxls": applyExcel(draft.map, false); break;
+    case "openprod": prodModal(b.dataset.pid); break;
+    case "addprod": prodModal(null); break;
+    case "setprice": b.disabled = true; await setPrice(b.dataset.pid, n(b.dataset.v)); break;
+    case "newdoc": lastSaved = null; draft = newDraft(); go("inbox"); break;
+    case "clearlast": lastSaved = null; render(); break;
+    case "newquote": draft = newDraft("quote"); go("inbox"); break;
+    case "opendoc": docModal(b.dataset.k, b.dataset.id); break;
+    case "posclose": posMap = null; render(); break;
+    case "posapply": applyPos(); break;
+    case "learn": draft = newDraft("invoice"); draft.supplierId = b.dataset.id; go("inbox"); break;
+    case "addsup": { const id = "s-" + uid(); await put("suppliers/" + id, { name: "ספק חדש", taxId: "", rebatePct: 0 }); toast("נוסף ספק. ערוך את הפרטים שלו."); break; }
+    case "savesup": {
+      const box = b.closest("[data-sup]"); const s = { ...S.suppliers[b.dataset.id] }; delete s.id;
+      box.querySelectorAll("[data-sf]").forEach(i => s[i.dataset.sf] = i.type === "number" ? n(i.value) : i.value);
+      await put("suppliers/" + b.dataset.id, s); toast("הספק נשמר"); break; }
+    case "clearcorr": case "clearmap": case "clearpdf": { const s = { ...S.suppliers[b.dataset.id] }; delete s.id; if (a === "clearcorr") s.corrections = []; else if (a === "clearpdf") delete s.pdfMap; else delete s.excelMap; await put("suppliers/" + b.dataset.id, s); toast("נמחק"); break; }
+    case "savesettings": await put("settings/main", { vat: n($("#sVat").value), margin: n($("#sMargin").value), rounding: $("#sRound").value, alertPct: n($("#sAlert").value), cheaperPct: n($("#sCheap").value) }); toast("ההגדרות נשמרו"); break;
+    case "deldemo": $("#demoConfirm").hidden = false; break;
+    case "deldemoyes": {
+      b.disabled = true;
+      const jobs = [...Object.values(S.products).filter(x => x.demo).map(x => "products/" + x.id), ...Object.values(S.suppliers).filter(x => x.demo).map(x => "suppliers/" + x.id), ...S.purchases.filter(x => x.demo).map(x => "purchases/" + x.id), ...S.quotes.filter(x => x.demo).map(x => "quotes/" + x.id), ...S.changes.filter(x => x.demo).map(x => "pricechanges/" + x.id)];
+      for (const p of jobs) await del(p); toast("נתוני הדוגמה נמחקו"); break; }
+    case "exportchanges": {
+      const pend = S.changes.filter(c => !c.exported);
+      const ok = await saveXlsx(`עדכון-מחירים-${today()}.xlsx`, [["ברקוד", "שם", "מחיר קודם", "מחיר חדש", "תאריך"], ...pend.map(c => [c.barcode, c.name, c.old ?? "", c.new, new Date(c.at).toLocaleDateString("he-IL")])]);
+      if (ok) for (const c of pend) { const x = { ...c }; delete x.id; x.exported = true; await put("pricechanges/" + c.id, x); }
+      break; }
+    case "exportprods": {
+      const rows = Object.values(S.products).map(p => { const s = stats(p.id); return [p.barcode || "", p.name, s.cost ? +s.cost.toFixed(2) : "", s.best ? supName(s.best.sup) : "", s.best ? +s.best.eff.toFixed(2) : "", s.sell ?? "", s.margin != null ? +(s.margin * 100).toFixed(1) : "", s.rec ?? ""]; });
+      await saveXlsx(`מוצרים-${today()}.xlsx`, [["ברקוד", "שם", "עלות אמיתית", "ספק זול", "עלות אצלו", "מחיר בחנות", "רווח %", "מחיר מומלץ"], ...rows]);
+      break; }
+  }
+});
+
+/* ---------- boot ---------- */
+(async function boot() {
+  route();
+  if (!window.claude?.use) { setStatus("פתח את הדף מתוך Claude כדי לשמור נתונים"); return; }
+  [db, sample, downloads] = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads")]);
+  if (!db) { setStatus("שמירת נתונים לא זמינה בתצוגה הזו"); return; }
+  subscribe();
+})();
+</script>
+
+</body></html>
