@@ -5,6 +5,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
@@ -92,6 +93,9 @@ textarea{min-height:80px;resize:vertical}
 }
 .line{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:10px}
 .line.free{background:var(--good-soft)}
+.line.got{border-color:var(--good);box-shadow:inset 4px 0 0 var(--good)}
+.tick{min-width:92px;font-weight:700}
+.tick.on{background:var(--good);color:#fff;border-color:var(--good)}
 .line .lg{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(92px,1fr))}
 .line .lg input{width:100%}
 .calc{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;padding-top:8px;border-top:1px dashed var(--line)}
@@ -117,13 +121,15 @@ td.best{background:var(--good-soft);color:var(--good);font-weight:600}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 details summary{cursor:pointer;color:var(--accent);font-weight:500}
+.syncchip{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line,#ddd);text-decoration:none;color:inherit;margin-inline-start:8px;white-space:nowrap}
+.syncchip.ok{color:#1b7a3a;border-color:#1b7a3a}.syncchip.warn{color:#b45309;border-color:#b45309}.syncchip.err{color:#b91c1c;border-color:#b91c1c}
 </style>
 </head><body>
 
 <div id="app" dir="rtl" lang="he">
   <header class="top">
     <div class="wrap">
-      <div class="brand"><b>נאמן ספקים</b><span id="status">טוען…</span></div>
+      <div class="brand"><b>נאמן ספקים</b><span id="status">טוען…</span><a href="#setup" id="syncChip" class="syncchip" title="סנכרון לענן">☁ בודק…</a></div>
       <nav class="tabs" id="tabs">
         <a href="#inbox" data-v="inbox">קליטת חשבונית</a>
         <a href="#alerts" data-v="alerts">התראות<span class="badge" id="badge" hidden></span></a>
@@ -158,8 +164,107 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
   const snapCol=(name)=>{ const docs=Object.keys(store).filter(p=>p.startsWith(name+"/")&&p.split("/").length===2).map(snapDoc); return {docs,size:docs.length,empty:!docs.length,docChanges:()=>[],metadata:{fromCache:false,hasPendingWrites:false}}; };
   function emit(){ for(const s of subs) try{ s.fn(s.kind==="doc"?snapDoc(s.path):snapCol(s.path)); }catch(e){ console.error(e); } }
   function sub(kind,path,fn){ const s={kind,path,fn}; subs.add(s); setTimeout(()=>fn(kind==="doc"?snapDoc(path):snapCol(path)),0); return ()=>subs.delete(s); }
+
+  /* ---------- cloud sync (Supabase): offline-first, last change wins per document ---------- */
+  const CFG={url:"https://ruqrkmmiblgertdewutw.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1cXJrbW1pYmxnZXJ0ZGV3dXR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODYxMzIsImV4cCI6MjEwOTI2MjEzMn0.vhtxvsZWtD6w6wXt9hANSs6vLUn6KuWLBiPUNgslCyk"};
+  const QKEY="neeman-sup-queue", MKEY="neeman-sup-meta", LKEY="neeman-sup-last";
+  const ld=(k,d)=>{ try{ const r=localStorage.getItem(k); return r?JSON.parse(r):d; }catch(e){ return d; } };
+  const sv=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+  let queue=ld(QKEY,{}), meta=ld(MKEY,{}), lastPull=ld(LKEY,"");
+  const sync={sb:null,sid:null,email:"",storeName:"",state:"init",msg:"",busy:false,again:false,lastOk:0};
+  const saveSync=()=>{ sv(QKEY,queue); sv(MKEY,meta); };
+  const pending=()=>Object.keys(queue).length;
+  function paint(){
+    const chip=document.getElementById("syncChip"), p=pending();
+    let t,c;
+    if(!window.supabase) { t="☁ לא זמין"; c="warn"; }
+    else if(sync.state==="init"){ t="☁ בודק…"; c=""; }
+    else if(sync.state==="out"){ t="☁ לא מחובר: הנתונים רק במכשיר הזה"; c="warn"; }
+    else if(sync.state==="err"){ t="☁ שגיאת סנכרון"+(p?" ("+p+" ממתינים)":""); c="err"; }
+    else if(sync.busy){ t="☁ מסנכרן…"; c=""; }
+    else if(p){ t="☁ "+p+" ממתינים לשליחה"; c="warn"; }
+    else { t="☁ מסונכרן"; c="ok"; }
+    if(chip){ chip.textContent=t; chip.className="syncchip "+c; }
+    const st=document.getElementById("lSyncStat");
+    if(st){ st.textContent=(sync.state==="out"?"לא מחובר":sync.state==="err"?("שגיאה: "+sync.msg):sync.busy?"מסנכרן…":p?(p+" שינויים ממתינים לשליחה"):"הכול מסונכרן"+(sync.lastOk?" ("+new Date(sync.lastOk).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})+")":"")); }
+  }
+  function stamp(path,data){ const ts=Date.now(); meta[path]=ts; queue[path]={d:data,ts}; saveSync(); paint(); kick(); }
+  let kt=0; function kick(){ clearTimeout(kt); kt=setTimeout(cycle,700); }
+  function applyRemote(r){
+    const q=queue[r.path]; if(q && q.ts>=r.ts) return false;
+    if((meta[r.path]||0)>=r.ts && !q) return false;
+    if(q) delete queue[r.path];
+    meta[r.path]=r.ts;
+    if(r.deleted||r.data==null) delete store[r.path]; else store[r.path]=r.data;
+    return true;
+  }
+  async function pull(){
+    let changed=false, maxU=lastPull, from=0;
+    for(;;){
+      let q=sync.sb.from("sup_docs").select("path,data,ts,deleted,updated_at").eq("store_id",sync.sid);
+      if(lastPull) q=q.gte("updated_at",lastPull);
+      const {data,error}=await q.order("updated_at",{ascending:true}).order("path",{ascending:true}).range(from,from+999);
+      if(error) throw error;
+      for(const r of data){ if(applyRemote(r)) changed=true; if(r.updated_at>maxU) maxU=r.updated_at; }
+      if(data.length<1000) break; from+=1000;
+    }
+    lastPull=maxU; sv(LKEY,lastPull); saveSync();
+    if(changed){ persist(); emit(); }
+  }
+  async function flush(){
+    const keys=Object.keys(queue);
+    for(let i=0;i<keys.length;i+=200){
+      const part=keys.slice(i,i+200).filter(p=>queue[p]);
+      const sent={}; const rows=part.map(p=>{ sent[p]=queue[p].ts; return {store_id:sync.sid,path:p,data:queue[p].d,ts:queue[p].ts,deleted:queue[p].d===null}; });
+      if(!rows.length) continue;
+      const {error}=await sync.sb.from("sup_docs").upsert(rows,{onConflict:"store_id,path"});
+      if(error) throw error;
+      for(const p of part){ if(queue[p] && queue[p].ts===sent[p]) delete queue[p]; }
+      saveSync();
+    }
+  }
+  async function cycle(){
+    if(!sync.sb) return;
+    if(!sync.sid){ if(!sync.busy) connect(); return; }
+    if(sync.busy){ sync.again=true; return; }
+    sync.busy=true; paint();
+    try{
+      await pull(); await flush();
+      sync.state="ok"; sync.msg=""; sync.lastOk=Date.now();
+    }catch(e){ sync.state="err"; sync.msg=String((e&&e.message)||e).slice(0,140); }
+    sync.busy=false; paint();
+    if(sync.again){ sync.again=false; kick(); }
+  }
+  async function connect(){
+    if(!window.supabase){ sync.state="out"; paint(); return; }
+    if(!sync.sb) sync.sb=window.supabase.createClient(CFG.url,CFG.key);
+    try{
+      const {data:{session}}=await sync.sb.auth.getSession();
+      if(!session){ sync.state="out"; sync.sid=null; paint(); return; }
+      const {data:st,error}=await sync.sb.from("stores").select("id,name").maybeSingle();
+      if(error) throw error;
+      if(!st){ sync.state="err"; sync.msg="אין חנות לחשבון הזה. פתחו קודם חנות בנאמן."; paint(); return; }
+      sync.sid=st.id; sync.storeName=st.name||""; sync.email=session.user.email||"";
+      // demo rows never go to the cloud; local data from before sync existed is queued as the oldest version
+      for(const p of Object.keys(store)){ if(store[p]&&store[p].demo){ delete store[p]; delete queue[p]; delete meta[p]; } else if(!meta[p]){ meta[p]=1; queue[p]={d:store[p],ts:1}; } }
+      saveSync(); persist(); emit();
+      sync.state="ok"; paint(); cycle();
+    }catch(e){ sync.state="err"; sync.msg=String((e&&e.message)||e).slice(0,140); paint(); }
+  }
+  async function signIn(email,pass){
+    if(!sync.sb) sync.sb=window.supabase.createClient(CFG.url,CFG.key);
+    const {error}=await sync.sb.auth.signInWithPassword({email,password:pass});
+    if(error) throw error;
+    await connect();
+  }
+  async function signOut(){ try{ if(sync.sb) await sync.sb.auth.signOut(); }catch(e){} sync.sid=null; sync.state="out"; paint(); }
+  setInterval(()=>{ if(!document.hidden&&navigator.onLine) cycle(); },25000);
+  addEventListener("online",()=>cycle());
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden) cycle(); });
+  document.addEventListener("DOMContentLoaded",()=>{ paint(); connect(); });
+  window.NSYNC={sync,cycle,paint,signIn,signOut,connect,pending};
   const db={
-    doc(path){ return { path, get:async()=>snapDoc(path), set:async(data)=>{ store[path]=JSON.parse(JSON.stringify(data)); persist(); emit(); }, update:async(data)=>{ store[path]={...(store[path]||{}),...data}; persist(); emit(); }, delete:async()=>{ delete store[path]; persist(); emit(); }, onSnapshot:(fn)=>sub("doc",path,fn) }; },
+    doc(path){ return { path, get:async()=>snapDoc(path), set:async(data)=>{ store[path]=JSON.parse(JSON.stringify(data)); persist(); emit(); stamp(path,store[path]); }, update:async(data)=>{ store[path]={...(store[path]||{}),...data}; persist(); emit(); stamp(path,store[path]); }, delete:async()=>{ delete store[path]; persist(); emit(); stamp(path,null); }, onSnapshot:(fn)=>sub("doc",path,fn) }; },
     collection(name){ return { path:name, onSnapshot:(fn)=>sub("col",name,fn), get:async()=>snapCol(name) }; }
   };
   async function toB64(blob){
@@ -187,15 +292,16 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
   const downloads={ save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000); return {status:"saved"}; } };
   window.claude={ use:async(name)=>({db,sample,downloads}[name]||null) };
   window.LOCAL={
-    panel(){ const k=getKey(); return `<div class="panel"><h3>קריאת צילומים ו-PDF</h3>
+    panel(){ const k=getKey(); setTimeout(paint,0); return `<div class="panel"><h3>סנכרון לענן</h3>${sync.sid?`<p class="muted">מחובר כ-<b>${sync.email}</b>${sync.storeName?" · "+sync.storeName:""}. כל שינוי נשמר בענן, ומופיע בכל מכשיר שמחובר לאותו חשבון. סטטוס: <b id="lSyncStat"></b></p><div class="row"><button class="btn primary" data-act="lsyncnow">סנכרן עכשיו</button><button class="btn ghost" data-act="lsignout">התנתק</button></div>`:`<p class="muted">התחברו עם אותו אימייל וסיסמה של נאמן, כדי שהנתונים יישמרו בענן ויתאחדו בין כל המכשירים והעובדים. בלי זה הנתונים נשמרים רק בדפדפן של המכשיר הזה. <span id="lSyncStat"></span></p><div class="grid"><label class="fld">אימייל<input id="lMail" type="email" autocomplete="username" dir="ltr"></label><label class="fld">סיסמה<input id="lPass" type="password" autocomplete="current-password" dir="ltr"></label></div><div class="row"><button class="btn primary" data-act="lsignin">התחבר</button></div>`}</div>
+      <div class="panel"><h3>קריאת צילומים ו-PDF</h3>
       <p class="muted">הקובץ עובד בלי Claude. כדי שהמערכת תקרא צילומי חשבוניות צריך מפתח API של Anthropic (נפתח ב-platform.claude.com, משלמים לפי שימוש, בערך 20 אגורות לחשבונית מצולמת עם Sonnet). אקסל והקלדה ידנית עובדים גם בלי מפתח.</p>
       <div class="grid"><label class="fld">מפתח API<input id="lKey" type="password" placeholder="sk-ant-..." value="${k?"••••••••"+k.slice(-4):""}"></label><label class="fld">מודל<select id="lModel"><option value="claude-sonnet-5-5" ${getModel()==="claude-sonnet-5-5"?"selected":""}>Sonnet 5.5 (מדויק, מומלץ)</option><option value="claude-haiku-5-5" ${getModel()==="claude-haiku-5-5"?"selected":""}>Haiku 5.5 (זול ומהיר)</option></select></label></div>
       <div class="row"><button class="btn primary" data-act="lsavekey">שמור</button>${k?`<button class="btn" data-act="ltestkey">בדוק חיבור</button>`:""}${k?`<button class="btn ghost danger" data-act="lclearkey">מחק מפתח</button>`:""}<span class="small muted">המפתח נשמר רק במחשב הזה.</span></div></div>
-      <div class="panel"><h3>גיבוי</h3><p class="muted">כל הנתונים נשמרים בדפדפן של המחשב הזה. מומלץ לגבות פעם בשבוע, ובקובץ הגיבוי אפשר גם להעביר את הנתונים למחשב אחר.</p>
+      <div class="panel"><h3>גיבוי</h3><p class="muted">קובץ גיבוי הוא עותק נוסף בידיים שלך, גם כשהכול מסונכרן. מומלץ להוריד פעם בשבוע. שחזור מחבר את הנתונים שבקובץ לנתונים הקיימים ולא מוחק כלום.</p>
       <div class="row"><button class="btn" data-act="lbackup">הורד גיבוי</button><button class="btn" data-act="lrestore">שחזר מגיבוי</button></div></div>`; }
   };
   const fin=document.createElement("input"); fin.type="file"; fin.accept=".json"; fin.hidden=true;
-  fin.onchange=async()=>{ const f=fin.files[0]; fin.value=""; if(!f) return; try{ const d=JSON.parse(await f.text()); if(typeof d!=="object"||!d) throw 0; store=d; persist(); emit(); toastL("הנתונים שוחזרו"); }catch(e){ toastL("קובץ הגיבוי לא תקין"); } };
+  fin.onchange=async()=>{ const f=fin.files[0]; fin.value=""; if(!f) return; try{ const d=JSON.parse(await f.text()); if(typeof d!=="object"||!d) throw 0; for(const p of Object.keys(d)){ if(d[p]&&typeof d[p]==="object"){ store[p]=d[p]; stamp(p,store[p]); } } persist(); emit(); toastL("הנתונים שוחזרו"); setTimeout(()=>location.reload(),900); }catch(e){ toastL("קובץ הגיבוי לא תקין"); } };
   document.addEventListener("DOMContentLoaded",()=>document.body.append(fin));
   function toastL(m){ const t=document.createElement("div"); t.className="toast"; t.textContent=m; document.body.append(t); setTimeout(()=>t.remove(),2800); }
   document.addEventListener("click",e=>{
@@ -205,6 +311,9 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
     if(a==="lclearkey"){ try{localStorage.removeItem(APIKEY);}catch(err){} toastL("המפתח נמחק"); location.reload(); }
     if(a==="lbackup"){ downloads.save({filename:"גיבוי-ספקים-"+new Date().toISOString().slice(0,10)+".json",data:new Blob([JSON.stringify(store)],{type:"application/json"})}); }
     if(a==="lrestore"){ fin.click(); }
+    if(a==="lsignin"){ const em=document.getElementById("lMail").value.trim(), pw=document.getElementById("lPass").value; if(!em||!pw){ toastL("צריך אימייל וסיסמה"); return; } b.disabled=true; b.textContent="מתחבר…"; signIn(em,pw).then(()=>{ if(sync.sid){ toastL("מחובר. מסנכרן…"); setTimeout(()=>location.reload(),1200); } else { toastL("ההתחברות לא הושלמה: "+(sync.msg||"")); b.disabled=false; b.textContent="התחבר"; } }).catch(e=>{ toastL(/invalid/i.test(e.message||"")?"אימייל או סיסמה לא נכונים":"שגיאה: "+String(e.message||e).slice(0,100)); b.disabled=false; b.textContent="התחבר"; }); }
+    if(a==="lsyncnow"){ cycle().then(()=>toastL(sync.state==="ok"?"מסונכרן":"שגיאה: "+sync.msg)); }
+    if(a==="lsignout"){ if(pending() && !confirm("יש "+pending()+" שינויים שלא נשלחו לענן. אם תתנתקו עכשיו הם יישארו רק במכשיר הזה. להתנתק?")) return; signOut().then(()=>location.reload()); }
   });
 })();
 </script>
@@ -383,7 +492,7 @@ function vInbox() {
       <p class="small muted">חשבונית של כמה עמודים: מצלמים כל עמוד ומוסיפים. אפשר גם לגרור קבצים לכאן.</p>
       ${d.files.length ? `<div class="thumbs">${d.files.map((f, i) => `<div class="thumb">${f.url ? `<img src="${f.url}" alt="עמוד ${i + 1}">` : esc(f.label)}<button data-act="rmfile" data-i="${i}" aria-label="הסר">×</button></div>`).join("")}</div>` : ""}
     </div>
-    ${d.files.length ? `<div class="row"><button class="btn primary" data-act="read" ${d.busy ? "disabled" : ""}>${d.busy ? `<span class="spin"></span> Claude קורא את המסמך…` : "קרא את המסמך"}</button>${d.busy ? `<button class="btn" data-act="stop">עצור</button>` : ""}${!d.busy && d.files.length && d.files.every(f => f.kind === "pdf") ? `<button class="btn" data-act="readlocal">קרא בלי Claude</button>` : ""}<span class="small muted" id="readMsg">${esc(d.msg || "")}</span></div>` : ""}
+    ${d.files.length ? `<div class="row"><button class="btn primary" data-act="read" ${d.busy ? "disabled" : ""}>${d.busy ? `<span class="spin"></span> קורא את המסמך…` : "קרא את המסמך"}</button>${d.busy ? `<button class="btn" data-act="stop">עצור</button>` : ""}${!d.busy && d.files.length && d.files.every(f => f.kind === "pdf") ? `<button class="btn" data-act="readlocal">קרא בלי Claude</button>` : ""}<span class="small muted" id="readMsg">${esc(d.msg || "")}</span></div>` : ""}
     ${d.err ? `<div class="warnbox">${esc(d.err)}</div>` : ""}
     <p class="small muted">אפשר גם <button class="btn ghost small" data-act="manual">להקליד ידנית</button>.</p>
   </div>
@@ -589,26 +698,204 @@ async function pdfToImages(file, maxPages) {
   return { imgs, text };
 }
 
+/* ---------- free reading of photos on the device (no Claude): OCR + a template learned per supplier ----------
+   Order: a known supplier with a learned template -> read here, free. New supplier, or the free reading isn't sure -> Claude.
+   After saving, the supplier's template is learned from the confirmed lines, so next time it's free. */
+const FREE = (() => {
+  const TESS = "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js";
+  let worker = null, loading = null;
+  const loadJs = (src, ok) => ok() ? Promise.resolve() : new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("load")); document.head.append(s); });
+  async function getWorker(step) {
+    if (worker) return worker;
+    if (!loading) loading = (async () => { await loadJs(TESS, () => window.Tesseract); step && step("טוען את מנוע הקריאה החינמי (רק בפעם הראשונה, כ-7MB)…"); worker = await Tesseract.createWorker(["heb", "eng"], 1); return worker; })().catch(e => { loading = null; throw e; });
+    return loading;
+  }
+  /* photo -> big black-on-white image with the table lines removed (free OCR reads tables much better this way) */
+  function prep(src) {
+    const k = Math.min(3, Math.max(1, 2000 / Math.max(1, src.width)));
+    const W = Math.round(src.width * k), H = Math.round(src.height * k);
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.imageSmoothingQuality = "high"; ctx.drawImage(src, 0, 0, W, H);
+    const img = ctx.getImageData(0, 0, W, H), d = img.data, g = new Uint8Array(W * H);
+    for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 299 + d[j + 1] * 587 + d[j + 2] * 114) / 1000;
+    const S = new Float64Array((W + 1) * (H + 1));
+    for (let y = 1; y <= H; y++) { let row = 0; for (let x = 1; x <= W; x++) { row += g[(y - 1) * W + x - 1]; S[y * (W + 1) + x] = S[(y - 1) * (W + 1) + x] + row; } }
+    const r = Math.max(10, Math.round(W / 100)), ink = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) { const y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
+      for (let x = 0; x < W; x++) { const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1);
+        const sum = S[y1 * (W + 1) + x1] - S[y0 * (W + 1) + x1] - S[y1 * (W + 1) + x0] + S[y0 * (W + 1) + x0];
+        ink[y * W + x] = g[y * W + x] < sum / ((y1 - y0) * (x1 - x0)) - 15 ? 1 : 0; } }
+    const line = new Uint8Array(W * H), L = Math.max(60, Math.round(W / 25));
+    for (let y = 0; y < H; y++) { let s = -1; for (let x = 0; x <= W; x++) { const on = x < W && ink[y * W + x]; if (on && s < 0) s = x; if (!on && s >= 0) { if (x - s >= L) for (let t = s; t < x; t++) line[y * W + t] = 1; s = -1; } } }
+    for (let x = 0; x < W; x++) { let s = -1; for (let y = 0; y <= H; y++) { const on = y < H && ink[y * W + x]; if (on && s < 0) s = y; if (!on && s >= 0) { if (y - s >= L) for (let t = s; t < y; t++) line[t * W + x] = 1; s = -1; } } }
+    for (let i = 0, j = 0; i < ink.length; i++, j += 4) {
+      let near = line[i]; if (!near) { const x = i % W, y = (i - x) / W;
+        for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2 && !near; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && line[yy * W + xx]) near = 1; } }
+      const v = ink[i] && !near ? 0 : 255; d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255; }
+    ctx.putImageData(img, 0, 0); return c;
+  }
+  async function blobToCanvas(blob) { const b = await createImageBitmap(blob); const k = Math.min(1, 2600 / Math.max(b.width, b.height)); const c = document.createElement("canvas"); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); c.getContext("2d").drawImage(b, 0, 0, c.width, c.height); return c; }
+  async function ocr(blobs, step) { const w = await getWorker(step); let text = "";
+    for (let i = 0; i < blobs.length; i++) { step && step(blobs.length > 1 ? `קורא בחינם עמוד ${i + 1} מתוך ${blobs.length}…` : "קורא את המסמך בחינם, בטלפון…"); const r = await w.recognize(prep(await blobToCanvas(blobs[i]))); text += r.data.text + "\n"; }
+    return text; }
+
+  /* ---- reading the text ---- */
+  const HEBR = /[֐-׿]/;
+  const clean = s => String(s || "").replace(/[‎‏‪-‮]/g, "").replace(/[|\[\]{}₪©®™_]/g, " ").replace(/[״“”]/g, '"').replace(/[׳‘’`]/g, "'").replace(/\s+/g, " ").trim();
+  const toNum = t => { const m = String(t).replace(/,(?=\d{3}\b)/g, "").replace(/%$/, "").match(/^-?\d+(?:\.\d+)?$/); return m ? Number(m[0]) : null; };
+  const SKIP = /סה"?כ|מע"?מ|לתשלום|תאריך|טל['׳]?|פקס|כתובת|לכבוד|חתימ|ח\.?\s?פ|ע\.?\s?מ\.?|עוסק|תעודת|חשבונית|הזמנה מס|עמוד|^רח['׳]|אסמכתא/;
+  const UNIT = /^(יח['׳"]?|יחידות|קרט['׳]?|קרטון|שק|ק"?ג|קג|ליטר|ל['׳]|ארגז|חב['׳]?|מארז|ית|n)$/;
+  const heb = s => String(s || "").replace(/[^א-ת ]/g, "").replace(/\s+/g, " ").trim();
+  function lev(a, b) { if (a === b) return 0; const m = a.length, k = b.length; if (!m || !k) return m || k; let p = Array.from({ length: k + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) { const c = [i]; for (let j = 1; j <= k; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); p = c; } return p[k]; }
+  function sim(a, b) { a = heb(a); b = heb(b); if (!a || !b) return 0; if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length) >= 0.5 ? 0.95 : 0.6; return 1 - lev(a, b) / Math.max(a.length, b.length); }
+  const near = (a, b) => Math.abs(a - b) <= Math.max(0.05, Math.abs(b) * 0.012);
+  function split(raw) {
+    const l = clean(raw); if (!l || SKIP.test(l)) return null;
+    let toks = l.split(" ").filter(Boolean);
+    const codes = toks.filter(t => /^\d{5,14}$/.test(t));
+    const barcode = codes.find(t => t.length >= 7) || "";
+    const supplierCode = codes.find(t => t !== barcode && t.length <= 8) || "";
+    toks = toks.filter(t => t !== barcode && t !== supplierCode);
+    const nums = [];
+    while (toks.length) {
+      const t = toks[toks.length - 1], v = toNum(t);
+      if (v !== null) { nums.unshift(v); toks.pop(); continue; }
+      if (!nums.length && t.length <= 1 && !HEBR.test(t)) { toks.pop(); continue; }
+      if ((UNIT.test(t) || (t.length <= 1 && !HEBR.test(t))) && nums.length && !(toks.length > 1 && toNum(toks[toks.length - 2]) !== null)) { toks.pop(); continue; }
+      break;
+    }
+    while (nums.length > 6) toks.push(String(nums.shift()));
+    while (toks.length && toks[0].length <= 1 && !HEBR.test(toks[0])) toks.shift();
+    const name = toks.join(" ").trim(), he = (name.match(/[א-ת]/g) || []).length;
+    if (!nums.length || (he < 2 && !barcode)) return null;
+    return { name, barcode, supplierCode, nums };
+  }
+  function header(lines) {
+    const all = lines.join("\n"), out = {};
+    const tax = all.match(/(?:ח\.?\s?פ\.?|ע\.?\s?מ\.?|עוסק(?: מורשה)?|ח"פ)\D{0,6}(\d{8,9})\b/); if (tax) out.taxId = tax[1];
+    const no = all.match(/(?:תעודת משלוח|ת\.?\s?משלוח|חשבונית(?: מס)?(?: קבלה)?|הזמנה|מסמך|אסמכתא)[^\d\n]{0,12}(\d{3,12})/); if (no) out.docNo = no[1];
+    const dt = all.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+    if (dt) { let [, dd, mm, yy] = dt.map(Number); if (yy < 100) yy += 2000; if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) out.date = `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`; }
+    const net = all.match(/סה"?כ[^\n\d]{0,6}לפני[^\n\d]{0,10}([\d,]+\.\d{2})/) || all.match(/לפני מע"?מ[^\n\d]{0,4}([\d,]+\.\d{2})/); if (net) out.net = toNum(net[1]);
+    const tot = all.match(/(?:לתשלום|סה"?כ כולל)[^\n\d]{0,10}([\d,]+\.\d{2})/); if (tot) out.total = toNum(tot[1]);
+    const COLS = /מק"?ט|ברקוד|תיאור|תאור|כמות|מחיר|סכום|פריט/;
+    const end = lines.findIndex(l => COLS.test(l) || split(l)); const hl = lines.slice(0, end > 0 ? Math.min(end, 8) : 6);
+    if (!out.taxId) { const h9 = hl.join(" ").match(/(?:^|[^\d-])(\d{9})(?![\d-])/); if (h9) out.taxId = h9[1]; }
+    out.top = hl.map(l => l.split(/תעודת|תאריך|חשבונית|הזמנה מס|מסמך/)[0]).filter(l => HEBR.test(l) && !/רח['׳]|טל['׳]|לכבוד|ח\.?\s?פ/.test(l))
+      .map(l => l.replace(/[^֐-׿"' ]/g, " ").replace(/\s+/g, " ").replace(/(^| )[א-ת](?= |$)/g, " ").trim()).filter(l => heb(l).length >= 4);
+    return out;
+  }
+  /* which saved supplier wrote this document: company number, else the name on top */
+  function whichSupplier(h, sups) {
+    if (h.taxId) { const s = sups.find(s => String(s.taxId || "").replace(/\D/g, "") === h.taxId); if (s) return s; }
+    let best = null, sc = 0;
+    for (const s of sups) for (const ref of [s.name, ...(s.ocrTpl?.heads || [])]) for (const t of h.top || []) { const v = sim(ref, t); if (v > sc) { sc = v; best = s; } }
+    return sc >= 0.72 ? best : null;
+  }
+  function numsToLine(nums, L) {
+    if (L && nums.length === L.n) return { qty: nums[L.qty], unitPrice: L.price >= 0 ? nums[L.price] : 0, lineTotal: L.total >= 0 ? nums[L.total] : null, lineDiscountPct: L.disc >= 0 ? nums[L.disc] : 0, how: "template" };
+    for (let i = 0; i < nums.length; i++) for (let j = 0; j < nums.length; j++) for (let k = 0; k < nums.length; k++) {
+      if (i === j || j === k || i === k) continue; const q = nums[i], p = nums[j], t = nums[k];
+      if (q > 0 && q < 10000 && p > 0 && near(q * p, t) && k > Math.min(i, j)) return { qty: q, unitPrice: p, lineTotal: t, lineDiscountPct: 0, how: "math" };
+    }
+    return null;
+  }
+  /* read the OCR text with this supplier's template -> the same shape Claude returns, plus a confidence */
+  function read(text, sup) {
+    const lines = String(text || "").split(/\r?\n/).map(clean).filter(Boolean), h = header(lines), T = sup?.ocrTpl || {};
+    const out = [];
+    for (const raw of lines) {
+      const s = split(raw); if (!s) continue;
+      const r = numsToLine(s.nums, T.layout); if (!r) continue;
+      let name = s.name;
+      const known = (s.barcode && T.names?.[s.barcode]) || (s.supplierCode && T.codes?.[s.supplierCode]) || Object.values(T.names || {}).map(x => [x, sim(x, name)]).filter(x => x[1] >= 0.8).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (known) name = known;
+      if (!name) name = s.barcode ? "מוצר " + s.barcode : ""; if (!name) continue;
+      out.push({ barcode: s.barcode || null, supplierCode: s.supplierCode || null, name, qty: r.qty, freeQty: 0, packSize: 1, unitPrice: r.unitPrice, lineDiscountPct: r.lineDiscountPct || 0, lineTotal: r.lineTotal, _how: r.how });
+    }
+    const sum = out.reduce((a, l) => a + (l.lineTotal != null ? l.lineTotal : l.qty * l.unitPrice * (1 - (l.lineDiscountPct || 0) / 100)), 0);
+    const net = T.pricesIncludeVat ? null : h.net;
+    /* the total before VAT, or else the total to pay (with VAT): OCR often garbles one of the two lines */
+    const sumOk = net ? near(sum, net) : h.total ? near(T.pricesIncludeVat ? sum : sum * vatF(), h.total) : null;
+    const knownShare = out.length ? out.filter(l => (l.barcode && T.names?.[l.barcode]) || (l.supplierCode && T.codes?.[l.supplierCode])).length / out.length : 0;
+    const allPriced = out.length && out.every(l => l.qty > 0 && l.unitPrice > 0);
+    const sure = !!(out.length && allPriced && (sumOk === true || (sumOk === null && knownShare >= 0.5 && out.every(l => l._how === "template"))));
+    return { sure, sumOk, sum: Math.round(sum * 100) / 100, header: h,
+      res: { docType: "invoice", supplierName: sup?.name || h.top?.[0] || "", supplierTaxId: h.taxId || null, docNo: h.docNo || null, date: h.date || null,
+        pricesIncludeVat: !!T.pricesIncludeVat, docDiscount: { type: "none", value: 0, onVat: "before" }, totalBeforeVat: h.net ?? null, vatAmount: null, totalWithVat: h.total ?? null,
+        lines: out.map(({ _how, ...l }) => l), templateNotes: sup?.templateNotes || "", doubts: [] } };
+  }
+  /* after the user saved the confirmed lines: learn how this supplier's photos look */
+  function learn(old, text, lines, extra) {
+    const T = { docs: (old?.docs || 0) + 1, heads: [...(old?.heads || [])], names: { ...(old?.names || {}) }, codes: { ...(old?.codes || {}) }, layout: old?.layout || null, pricesIncludeVat: !!extra.pricesIncludeVat };
+    const rows = String(text || "").split(/\r?\n/).map(clean).filter(Boolean), h = header(rows);
+    for (const t of (h.top || []).slice(0, 2)) if (!T.heads.includes(t)) T.heads.push(t);
+    T.heads = T.heads.slice(-8);
+    const votes = {};
+    for (const raw of rows) {
+      const s = split(raw); if (!s) continue;
+      const l = lines.find(x => (s.barcode && cleanBarcode(x.barcode) === s.barcode) || (s.supplierCode && String(x.supplierCode || "") === s.supplierCode)) || lines.find(x => sim(x.name, s.name) >= 0.75);
+      if (!l) continue;
+      const idx = v => s.nums.findIndex(x => near(x, n(v)) && n(v) !== 0);
+      const L = { n: s.nums.length, qty: idx(l.qty), price: idx(l.unitPrice), total: l.lineTotal != null ? idx(l.lineTotal) : -1, disc: n(l.lineDiscountPct) ? idx(l.lineDiscountPct) : -1 };
+      if (L.qty < 0 || L.price < 0 || L.qty === L.price) continue;
+      const k = JSON.stringify(L); votes[k] = (votes[k] || 0) + 1;
+    }
+    const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]; if (best) T.layout = JSON.parse(best[0]);
+    for (const l of lines) { const bc = cleanBarcode(l.barcode); if (bc && l.name) T.names[bc] = l.name; if (l.supplierCode && l.name) T.codes[String(l.supplierCode)] = l.name; }
+    const trim = o => { const k = Object.keys(o); if (k.length > 1500) k.slice(0, k.length - 1500).forEach(x => delete o[x]); };
+    trim(T.names); trim(T.codes);
+    return T;
+  }
+  return { ocr, read, learn, header, whichSupplier, split };
+})();
+
 let readCtl = null;
 async function readDoc() {
   if (await readLocal(true)) return;
-  if (!sample) { draft.err = "קריאה עם Claude לא זמינה כאן. ב-PDF אפשר ללחוץ \"קרא בלי Claude\", ואפשר גם לקלוט אקסל או להקליד ידנית."; render(); return; }
-  const lim = await sample.limits().catch(() => null);
-  if (!lim?.images) { draft.err = "התצוגה הזו לא יכולה לשלוח תמונות ל-Claude. נסה מאפליקציית Claude או מהדפדפן."; render(); return; }
   draft.busy = true; draft.err = ""; draft.msg = "מכין את העמודים…"; render();
+  const say = t => { draft.msg = t; const m = $("#readMsg"); if (m) m.textContent = t; };
+  let images = [], pdfText = "";
   try {
-    let images = [], pdfText = "";
     for (const f of draft.files) {
-      if (f.kind === "pdf") { const r = await pdfToImages(f.file, lim.images.maxCount); images.push(...r.imgs); pdfText += r.text; }
+      if (f.kind === "pdf") { const r = await pdfToImages(f.file, 10); images.push(...r.imgs); pdfText += r.text; }
       else images.push(f.file);
     }
+  } catch (e) { draft.busy = false; draft.err = "לא הצלחתי לפתוח את הקובץ."; render(); return; }
+  /* 1. free reading on this device. A supplier we already learned is read here, without Claude */
+  let why = "fail";
+  try {
+    draft.ocrText = await FREE.ocr(images, say);
+    const h = FREE.header(draft.ocrText.split(/\r?\n/));
+    const sup = S.suppliers[draft.supplierId] || FREE.whichSupplier(h, Object.values(S.suppliers));
+    why = !sup ? "new" : !sup.ocrTpl?.layout ? "notpl" : "unsure";
+    if (sup && !draft.supplierId) draft.supplierId = sup.id;
+    if (sup && sup.ocrTpl?.layout) {
+      const fr = FREE.read(draft.ocrText, sup);
+      if (fr.sure) {
+        const ocrText = draft.ocrText; draft.supplierId = sup.id;
+        startReview(fr.res, "ocr");
+        draft.ocrText = ocrText;
+        draft.srcNote = `נקרא בטלפון בלי Claude (חינם), לפי מה שנלמד מ-${sup.ocrTpl.docs} מסמכים של ${sup.name}${fr.sumOk ? '. סכום השורות תואם לסה"כ במסמך' : ""}.`;
+        render(); return;
+      }
+    }
+  } catch (e) { console.error(e); why = "fail"; }
+  /* 2. Claude: only for a new supplier, or when the free reading wasn't sure */
+  const WHY = { new: "ספק חדש, ולכן Claude קורא. אחרי השמירה אלמד אותו, ובפעם הבאה הקריאה תהיה בחינם.", notpl: "עוד לא נלמדה קריאה חינמית של הספק הזה, ולכן Claude קורא. אחרי השמירה היא תילמד.", unsure: "הקריאה החינמית לא הייתה בטוחה, ולכן Claude קורא.", fail: "הקריאה החינמית לא הצליחה, ולכן Claude קורא." };
+  if (!sample) { draft.busy = false; draft.err = "קריאה עם Claude לא זמינה כאן. ב-PDF אפשר ללחוץ \"קרא בלי Claude\", ואפשר גם לקלוט אקסל או להקליד ידנית."; render(); return; }
+  const lim = await sample.limits().catch(() => null);
+  if (!lim?.images) { draft.busy = false; draft.err = "התצוגה הזו לא יכולה לשלוח תמונות ל-Claude. נסה מאפליקציית Claude או מהדפדפן."; render(); return; }
+  say(WHY[why]);
+  try {
     images = images.slice(0, lim.images.maxCount);
     const sup = S.suppliers[draft.supplierId];
     const prompt = buildPrompt(sup, draft.kind, pdfText);
     readCtl = new AbortController();
-    const m = $("#readMsg"); if (m) m.textContent = "Claude קורא את המסמך. זה לוקח בדרך כלל חצי דקה עד דקה.";
+    say(WHY[why] + " זה לוקח בדרך כלל חצי דקה עד דקה.");
     const res = await sample.json(prompt, { images, signal: readCtl.signal, cache: false });
-    startReview(res, "ai");
+    const ocrText = draft.ocrText; startReview(res, "ai"); draft.ocrText = ocrText; draft.srcNote = { new: "ספק חדש: Claude קרא את המסמך. אחרי השמירה אלמד את הספק, ובפעם הבאה הקריאה תהיה בחינם.", notpl: "Claude קרא את המסמך. אחרי השמירה תילמד גם הקריאה החינמית של הספק.", unsure: "הקריאה החינמית לא הייתה בטוחה, ולכן Claude קרא את המסמך.", fail: "הקריאה החינמית לא הצליחה, ולכן Claude קרא את המסמך." }[why]; render();
   } catch (e) {
     draft.busy = false;
     const code = e?.code;
@@ -754,6 +1041,7 @@ function vReview() {
     ${d.mergeAsk && d.merge == null ? (() => { const ex = (isQ ? S.quotes : S.purchases).find(x => x.id === d.mergeAsk); return `<div class="warnbox stack" id="mergeBox"><b>${isQ ? "הצעת מחיר" : "חשבונית"} מספר ${esc(doc.docNo)} מהספק הזה כבר נשמרה (${(ex?.lines || []).length} שורות, ${fmtDate(ex?.date)}).</b><span>אם זה דף נוסף של אותו מסמך, צרף את השורות אליו.</span><div class="row"><button class="btn primary" data-act="mergeyes">צרף לקיימת</button><button class="btn" data-act="mergeno">שמור כמסמך נפרד</button></div></div>`; })() : ""}
     <div class="row"><button class="btn primary" data-act="save">${isQ ? "שמור הצעת מחיר" : "שמור חשבונית"}</button><span class="small muted">אפשר לשמור עכשיו או אחרי מעבר על השורות.</span></div>
   </div>
+  ${doc.lines.length ? `<div class="row between"><b>הגיעו ${doc.lines.filter(l => l.arrived).length} מתוך ${doc.lines.length}</b><button class="btn small" data-act="arriveall">${doc.lines.every(l => l.arrived) ? "בטל סימון לכולם" : "✓ הכול הגיע"}</button></div>` : ""}
   <div class="stack" id="lines">${lineHtml || emptyMsg("אין שורות", "הוסף שורה ידנית")}</div>
   <div class="row"><button class="btn" data-act="addline">הוסף שורה</button></div>
   <div class="panel">
@@ -782,8 +1070,8 @@ function lineCard(l, i, C, supId) {
   const howPill = { barcode: `<span class="pill good">זוהה לפי ברקוד</span>`, alias: `<span class="pill good">זוהה לפי שם אצל הספק</span>`, name: `<span class="pill info">זוהה לפי שם</span>`, new: `<span class="pill warn">מוצר חדש</span>`, manual: `<span class="pill good">שויך ידנית</span>` }[l.how || "new"];
   const isFree = n(l.qty) === 0 && n(l.freeQty) > 0;
   const bonusInfo = n(l.freeQty) > 0 && C.printedUnit[i] > 0 && eff ? ` · מחיר ברשימה ${money(C.printedUnit[i])}, בפועל ${money(eff)}` : "";
-  return `<div class="line ${isFree ? "free" : ""}" data-i="${i}">
-    <div class="row between"><div class="row" style="min-width:0;flex:1"><b style="min-width:0">${esc(l.name || "שורה ללא שם")}</b>${howPill}${isFree ? `<span class="pill good">בונוס</span>` : ""}${lineMismatch(l, draft.doc) != null ? `<span class="pill bad">השורה לא מסתכמת: במסמך ${money(l.lineTotal)}, מחושב ${money(lineMismatch(l, draft.doc))}</span>` : ""}</div><button class="btn ghost danger small" data-act="rmline" data-i="${i}">מחק</button></div>
+  return `<div class="line ${isFree ? "free" : ""} ${l.arrived ? "got" : ""}" data-i="${i}">
+    <div class="row between"><div class="row" style="min-width:0;flex:1"><b style="min-width:0">${esc(l.name || "שורה ללא שם")}</b>${howPill}${isFree ? `<span class="pill good">בונוס</span>` : ""}${lineMismatch(l, draft.doc) != null ? `<span class="pill bad">השורה לא מסתכמת: במסמך ${money(l.lineTotal)}, מחושב ${money(lineMismatch(l, draft.doc))}</span>` : ""}</div><div class="row" style="flex:none">${l.added ? `<button class="btn ghost danger small" data-act="rmline" data-i="${i}">מחק</button>` : ""}<button class="btn small tick ${l.arrived ? "on" : ""}" data-act="arrive" data-i="${i}" aria-pressed="${l.arrived ? "true" : "false"}">${l.arrived ? "✓ הגיע" : "סמן ✓ הגיע"}</button></div></div>
     <div class="lg">
       <label class="fld">שם בחשבונית<input data-f="name" value="${esc(l.name)}"></label>
       <label class="fld">ברקוד<input data-f="barcode" inputmode="numeric" value="${esc(l.barcode)}"></label>
@@ -856,6 +1144,8 @@ async function saveDraft() {
     if (d.excelMap) sup.excelMap = d.excelMap;
     if (d.pdfMap) sup.pdfMap = { ...d.pdfMap, pricesIncludeVat: !!doc.pricesIncludeVat };
     else if (d.source === "ai" && d.pdfTable?.header) { const m = learnPdfMap(d.pdfTable, doc.lines); if (m) sup.pdfMap = { ...m, pricesIncludeVat: !!doc.pricesIncludeVat }; }
+    /* learn the free reading of this supplier's photos from the lines the user just confirmed */
+    if (d.ocrText && (d.source === "ai" || d.source === "ocr")) { try { const t = FREE.learn(sup.ocrTpl, d.ocrText, doc.lines, { pricesIncludeVat: doc.pricesIncludeVat }); if (t.layout) sup.ocrTpl = t; } catch (e) { console.error(e); } }
     if (!sup.taxId && d.taxId) sup.taxId = d.taxId;
     sup.lastDoc = doc.date; delete sup.id;
     await put("suppliers/" + supId, sup);
@@ -875,7 +1165,7 @@ async function saveDraft() {
       if (!p.barcode && cleanBarcode(l.barcode)) p.barcode = cleanBarcode(l.barcode);
       delete p.demo;
       await put("products/" + pid, p); S.products[pid] = { id: pid, ...p };
-      lines.push({ pid, barcode: l.barcode || "", supplierCode: l.supplierCode || "", name: l.name, qty: n(l.qty), freeQty: n(l.freeQty), packSize: n(l.packSize) || 1, unitPrice: n(l.unitPrice), lineDiscountPct: n(l.lineDiscountPct), lineTotal: l.lineTotal ?? null, eff: C.eff[i] ? +C.eff[i].toFixed(4) : null });
+      lines.push({ pid, barcode: l.barcode || "", supplierCode: l.supplierCode || "", name: l.name, qty: n(l.qty), freeQty: n(l.freeQty), packSize: n(l.packSize) || 1, unitPrice: n(l.unitPrice), lineDiscountPct: n(l.lineDiscountPct), lineTotal: l.lineTotal ?? null, arrived: !!l.arrived, eff: C.eff[i] ? +C.eff[i].toFixed(4) : null });
     }
     const rec = { supplierId: supId, docNo: calc.docNo, date: calc.date, pricesIncludeVat: calc.pricesIncludeVat, docDiscount: calc.docDiscount, docDiscPct: +C.docDiscPct.toFixed(3), totalExVat: +C.totalExVat.toFixed(2), totalWithVat: +(doc.printedTotal || C.totalWithVat).toFixed(2), lines, createdAt: mergeDoc?.createdAt || Date.now(), source: d.source || "manual" };
     if (mergeDoc?.demo) rec.demo = true;
@@ -1186,7 +1476,7 @@ function docModal(kind, id) {
   const bg = document.createElement("div"); bg.className = "modal-bg";
   bg.innerHTML = `<div class="modal"><div class="row between"><h2>${esc(supName(x.supplierId))}</h2><button class="btn ghost" data-x>סגור</button></div>
   <p class="muted">${kind === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)} · ${x.pricesIncludeVat ? "מחירים כולל מע\"מ" : "מחירים לפני מע\"מ"}${x.docDiscPct ? ` · הנחה כללית ${n(x.docDiscPct).toFixed(2)}%` : ""}</p>
-  <div class="tbl"><table><thead><tr><th>מוצר</th><th>כמות</th><th>בונוס</th><th>מחיר</th><th>הנחה</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${(x.lines || []).map(l => `<tr><td>${esc(l.name)}<br><span class="small muted num">${esc(l.barcode || "")}</span></td><td class="num">${l.qty}${l.packSize > 1 ? " ×" + l.packSize : ""}</td><td class="num">${l.freeQty || "—"}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${l.lineDiscountPct ? l.lineDiscountPct + "%" : "—"}</td><td class="num">${money(l.eff)}</td></tr>`).join("")}</tbody></table></div>
+  <div class="tbl"><table><thead><tr><th>הגיע</th><th>מוצר</th><th>כמות</th><th>בונוס</th><th>מחיר</th><th>הנחה</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${(x.lines || []).map(l => `<tr><td style="color:var(--good);font-weight:700">${l.arrived ? "✓" : "—"}</td><td>${esc(l.name)}<br><span class="small muted num">${esc(l.barcode || "")}</span></td><td class="num">${l.qty}${l.packSize > 1 ? " ×" + l.packSize : ""}</td><td class="num">${l.freeQty || "—"}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${l.lineDiscountPct ? l.lineDiscountPct + "%" : "—"}</td><td class="num">${money(l.eff)}</td></tr>`).join("")}</tbody></table></div>
   <div class="row"><span>סה"כ: <b class="num">${money(x.totalWithVat)}</b></span></div>
   <div class="row between"><button class="btn" data-edit>פתח לעריכה</button><button class="btn ghost danger" data-del>מחק</button></div>
   <div class="warnbox" data-confirm hidden>למחוק את המסמך? העלויות שלו יוסרו מההשוואות. <button class="btn danger" data-delyes>כן, מחק</button></div></div>`;
@@ -1244,10 +1534,12 @@ document.addEventListener("click", async e => {
     case "read": readDoc(); break;
     case "readlocal": readLocal(false); break;
     case "stop": readCtl?.abort(); break;
-    case "manual": startReview({ lines: [{ name: "", qty: 1, unitPrice: 0 }], date: today() }, "manual"); break;
+    case "manual": startReview({ lines: [{ name: "", qty: 1, unitPrice: 0 }], date: today() }, "manual"); if (draft.doc?.lines[0]) { draft.doc.lines[0].added = true; render(); } break;
     case "cancel": draft = newDraft(draft?.kind); render(); break;
-    case "addline": draft.doc.lines.push({ name: "", barcode: "", qty: 1, freeQty: 0, packSize: 1, unitPrice: 0, lineDiscountPct: 0, pid: "", how: "new" }); render(); break;
-    case "rmline": draft.doc.lines.splice(+b.dataset.i, 1); if (draft.ai) draft.ai.lines.splice(+b.dataset.i, 1); render(); break;
+    case "addline": draft.doc.lines.push({ name: "", barcode: "", qty: 1, freeQty: 0, packSize: 1, unitPrice: 0, lineDiscountPct: 0, pid: "", how: "new", added: true }); render(); break;
+    case "rmline": { const i = +b.dataset.i; if (!draft.doc.lines[i]?.added) break; draft.doc.lines.splice(i, 1); if (draft.ai && i < draft.ai.lines.length) draft.ai.lines.splice(i, 1); render(); break; }
+    case "arrive": { const l = draft.doc?.lines[+b.dataset.i]; if (l) { l.arrived = !l.arrived; render(); } break; }
+    case "arriveall": { const L = draft.doc?.lines || []; const all = L.every(l => l.arrived); L.forEach(l => l.arrived = !all); render(); break; }
     case "save": saveDraft(); break;
     case "suggestgroups": suggestGroups(); break;
     case "applygroups": applyGroups(); break;
