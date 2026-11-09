@@ -134,6 +134,47 @@ details.more summary{cursor:pointer;font-weight:600;color:var(--muted);margin-to
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips input{position:absolute;opacity:0;pointer-events:none}
+.dropzone{display:grid;gap:4px;justify-items:center;text-align:center;border:2px dashed var(--line);border-radius:16px;padding:26px 16px;cursor:pointer;background:var(--surface);transition:all .15s}
+.dropzone b{font-size:1.05rem}.dropzone span{color:var(--muted);font-size:.9rem}
+.dropzone.over,.dropzone:hover{border-color:var(--brass);background:var(--brass-soft)}
+.dropzone .dz-name{color:var(--ink);font-weight:700}
+.sr-only{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+#view.drop-on{outline:3px dashed var(--brass);outline-offset:6px;border-radius:16px}
+.rcv-start{display:grid;gap:12px;margin-top:14px}
+.rcv-start .btn.big{justify-content:center;font-size:1.1rem;padding:18px}
+.rcv-wait{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.spin{width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--brass);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rcv-list li{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+@media (max-width:640px){.grid3{grid-template-columns:1fr}}
+.rcv-prog{height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;margin:14px 0 6px}
+.rcv-prog div{height:100%;background:var(--em-ring,#2f7d62);transition:width .3s}
+.rcv-lines{display:grid;gap:8px}
+.rcv-line{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-inline-start:5px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)}
+.rcv-line.st-ok{border-inline-start-color:var(--ok,#2f7d62)}
+.rcv-line.st-part{border-inline-start-color:var(--brass)}
+.rcv-line.st-none{border-inline-start-color:var(--line)}
+.rcv-line.st-over,.rcv-line.st-extra{border-inline-start-color:var(--danger)}
+.rcv-line.st-ok .rl-st{background:color-mix(in srgb,var(--ok,#2f7d62) 15%,transparent);color:var(--ok,#2f7d62)}
+.rcv-line.st-part .rl-st{background:var(--brass-soft);color:var(--warn)}
+.rcv-line.st-over .rl-st,.rcv-line.st-extra .rl-st{background:color-mix(in srgb,var(--danger) 13%,transparent);color:var(--danger)}
+.rcv-line.flash{animation:flash 1s}
+@keyframes flash{0%{background:var(--brass-soft)}100%{background:var(--surface)}}
+.rl-main{flex:1 1 220px;min-width:0}
+.rl-price{display:inline-flex;align-items:center;gap:4px}.rl-price input{width:84px}
+.rcv-line.draft .rl-main{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dl-name{flex:1 1 220px;min-width:0}.dl-qty{width:84px}
+.read-banner{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--sunk);display:grid;gap:4px}
+.rl-check{flex:0 0 auto;width:48px;height:48px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:transparent;font-size:1.6rem;font-weight:800;cursor:pointer;display:grid;place-items:center;transition:all .15s}
+.rl-check:hover:not(:disabled){border-color:var(--ok)}
+.rl-check.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.rl-check:disabled{opacity:.45;cursor:default}
+.rl-link select{margin-top:6px;max-width:100%;font-size:.88rem}
+.rl-qty{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stepper{display:flex;gap:6px;align-items:center}
+.stepper b{min-width:2ch;text-align:center;font-size:1.15rem}
+.notice{background:var(--brass-soft);border-radius:12px;padding:10px 14px;font-size:.92rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .remin-row{display:flex;align-items:center;gap:8px;margin-top:8px}.remin-row input{width:90px}
 .chips label{border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600;background:var(--surface);transition:all .15s}
 .chips input:checked+label{background:var(--em);color:var(--on-em);border-color:var(--em);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--brass)}
@@ -304,6 +345,7 @@ td input,td select{border:1px solid var(--line);background:var(--surface);border
         <a href="#today">היום</a>
         <a href="#sale">רישום מכירה</a>
         <a href="#customers">לקוחות</a>
+        <a href="#receive">קבלת סחורה</a>
         <a href="#report">דוח חודשי</a>
         <a href="#kiosk">עמדת QR</a>
         <a href="#setup">הגדרות החנות</a>
@@ -541,7 +583,7 @@ async function loadAll(store){
     rules: ru.data.map(r => ({id:r.id, name:r.name, pets:r.pets||[], every:r.every, template:r.template})),
     customers: cu.data.map(c => ({
       id:c.id, name:c.name, phone:c.phone, pet:c.pet, petName:c.pet_name||'', size:Number(c.size)||1, count:c.count||1, productId:c.product_id,
-      daysOverride:c.days_override||null, replyToken:c.reply_token,
+      daysOverride:c.days_override||null, replyToken:c.reply_token, extId:c.ext_id||'', city:c.city||'', note:c.note||'', nextAt:c.next_at||null, nextSet:c.next_set||null,
       consent:{date:String(c.consent_at).slice(0,10), source:c.consent_source},
       pendingOrder: c.pending_product ? {date:c.pending_at||today(), productId:c.pending_product} : undefined,
       purchases:(P[c.id]||[]).map(p => ({id:p.id, date:p.date, productId:p.product_id, price:Number(p.price), src:p.src})).sort((a,b)=>a.date<b.date?-1:1),
@@ -566,7 +608,8 @@ function rowsOf(S){
     c.replyToken ||= crypto.randomUUID();
     out.customers[c.id] = {id:c.id, store_id:sid, name:c.name, phone:c.phone, pet:c.pet, pet_name:c.petName||null, size:Number(c.size)||1, count:Number(c.count)||1,
       product_id:c.productId||null, days_override:c.daysOverride||null, consent_source:c.consent?.source||'seller', consent_at:c.consent?.date||today(),
-      pending_product:c.pendingOrder?.productId||null, pending_at:c.pendingOrder?.date||null, reply_token:c.replyToken, opted_out:false};
+      pending_product:c.pendingOrder?.productId||null, pending_at:c.pendingOrder?.date||null, reply_token:c.replyToken, opted_out:false,
+      ext_id:c.extId||null, city:c.city||null, note:c.note||null, next_at:c.nextAt||null, next_set:c.nextAt?(c.nextSet||today()):null};
     for (const p of c.purchases){ p.id ||= crypto.randomUUID(); out.purchases[p.id] = {id:p.id, store_id:sid, customer_id:c.id, product_id:p.productId||null, price:Number(p.price)||0, date:p.date, src:p.src||'manual'}; }
     for (const r of c.reminders){ r.id ||= crypto.randomUUID(); out.reminders[r.id] = {id:r.id, store_id:sid, customer_id:c.id, date:r.date}; }
     for (const x of (c.extras||[])){ x.id ||= crypto.randomUUID(); out.customer_rules[x.id] = {id:x.id, store_id:sid, customer_id:c.id, rule_id:x.ruleId, last:x.last}; }
@@ -651,19 +694,24 @@ function cycle(c){
   }
   return {days:base, base, learned:0};
 }
+/* a reminder date that came from the POS counts until the customer buys again */
+const posDate = c => c.nextAt && !(c.purchases.length && lastBuy(c) > (c.nextSet || '0000')) ? c.nextAt : null;
+const pendingImport = c => c.consent?.source === 'import';
 function status(c){
-  const L = lastBuy(c), cy = cycle(c), due = addDays(L, cy.days), left = diff(due, today());
-  const R = lastRem(c), remAfter = R && R > L;
+  const L = lastBuy(c), cy = cycle(c), pd = posDate(c);
+  const due = pd ? addDays(pd, 5) : addDays(L, cy.days), left = diff(due, today());
+  const R = lastRem(c), remAfter = R && R > (pd ? (c.nextSet || L) : L);
   let st;
   if (c.pendingOrder) st = 'ordered';
-  else if (remAfter) st = (diff(today(), R) >= 6 && left < 0) ? 'followup' : 'sent';
+  else if (remAfter) st = (!pendingImport(c) && diff(today(), R) >= 6 && left < 0) ? 'followup' : 'sent';
   else if (left < 0) st = 'overdue';
   else if (left <= 5) st = 'due';
   else if (left <= 10) st = 'soon';
   else st = 'ok';
-  const frac = Math.max(0, Math.min(1, left / cy.days));
-  return {st, left, due, cy, frac, R};
+  const frac = Math.max(0, Math.min(1, left / (pd ? Math.max(5, diff(due, c.nextSet || today())) : cy.days)));
+  return {st, left, due, cy, frac, R, pos:!!pd};
 }
+const CONSENT_TXT = {qr:'נרשם לבד ב-QR', seller:'אישר למוכר', import:'עבר מהקופה, עוד לא אישר', import_ok:'עבר מהקופה ואישר בוואטסאפ'};
 const ST_LABEL = {ordered:'ביקש שק', overdue:'כנראה כבר נגמר', due:'נגמר בקרוב', followup:'לא חזר – לפנות שוב', sent:'נשלחה תזכורת', soon:'עוד כשבוע וחצי', ok:'מכוסה'};
 const needsAction = s => s.st==='overdue' || s.st==='due' || s.st==='followup';
 
@@ -674,8 +722,11 @@ function daysPhrase(left){
   if (left <= 2) return 'לעוד יום-יומיים';
   return 'לעוד כ-'+left+' ימים';
 }
+const OPTIN_TPL = 'היי {שם}, כאן {חנות}.\nלפי מה שרשום אצלנו, כנראה הגיע הזמן לחדש את האוכל. להכין לך?\nמעכשיו נשמח להזכיר לך בוואטסאפ כמה ימים לפני שהאוכל נגמר. מתאים לך?';
 function buildMsg(c, noLink){
   const s = status(c), p = prod(c.productId);
+  if (pendingImport(c)) return OPTIN_TPL.replaceAll('{שם}', c.name.split(' ')[0]).replaceAll('{חנות}', S.store.name)
+    + (noLink ? '' : '\n\nלתשובה בלחיצה (כן / תזכירו לי בהמשך / לא תודה):\n' + replyUrl(c));
   return ((S.store.templates||{})[c.pet] || S.store.template)
     .replaceAll('{שם}', c.name.split(' ')[0])
     .replaceAll('{חנות}', S.store.name)
@@ -912,6 +963,7 @@ function modal(html){
   $('#overlayRoot').innerHTML = `<div class="overlay center" data-act="close"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">${html}</div></div>`;
 }
 function handleScan(code){
+  if ((location.hash||'') === '#receive' && rcvScan(code)) return;
   const p = S.products.find(x => x.barcode && x.barcode===code);
   if (p) return openSaleModal(p, {source:'scan'});
   modal(`<span class="eyebrow">ברקוד חדש</span><h2 id="mTitle">לאיזה מוצר שייך הברקוד?</h2>
@@ -1137,6 +1189,7 @@ views.today = () => {
     <div class="kpi"><span>חזרו אחרי תזכורת · 30 יום</span><b class="num">${ret.length}</b></div>
     <div class="kpi gold"><span>הכנסה שהמערכת החזירה</span><b class="num">${money(rev)}</b></div>
   </div>
+  ${watchState === 'needs' ? `<div class="notice" style="margin-bottom:14px">הייבוא האוטומטי מהקופה מחכה לאישור (הדפדפן מבקש אחרי הפעלה מחדש). <button class="btn sm primary" data-act="watchresume">אישור</button></div>` : ''}
   ${ordersHTML()}
   <section class="panel">
     <div class="row"><h2>למי לפנות היום</h2><span class="spacer"></span><a class="btn" href="#sale">+ רישום מכירה</a></div>
@@ -1166,7 +1219,7 @@ function eodHTML(todays){
 views.customers = () => {
   const rows = S.customers.map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
   return `<section class="panel">
-    <div class="row"><h2>כל הלקוחות</h2><span class="sub">(${S.customers.length})</span><span class="spacer"></span><a class="btn primary" href="#sale">+ לקוח חדש / מכירה</a></div>
+    <div class="row"><h2>כל הלקוחות</h2><span class="sub">(${S.customers.length})</span><span class="spacer"></span><button class="btn" data-act="importxl">ייבוא מאקסל (מהקופה)</button><a class="btn primary" href="#sale">+ לקוח חדש / מכירה</a></div>
     <div class="field" style="margin-top:12px"><label for="custFilter">חיפוש</label><input id="custFilter" placeholder="שם, טלפון או שם החיה"></div>
     <div class="list" id="custList">${rows.map(x=>custRow(x.c,'list')).join('')}</div>
   </section>`;
@@ -1234,7 +1287,8 @@ views.report = () => {
   </section>`;
 };
 
-views.setup = () => `<section class="panel"><h2>קישור ההרשמה של החנות</h2>
+views.setup = () => `<section class="panel" id="watchPanel"><h2>ייבוא אוטומטי מהקופה</h2>${watchHTML()}</section>
+  <section class="panel"><h2>קישור ההרשמה של החנות</h2>
     <p class="sub">זה הקישור שה-QR פותח. אפשר גם לשים אותו באתר, באינסטגרם או בסטטוס.</p>
     <div class="linkbox" style="margin-top:12px"><code>${esc(joinUrl())}</code><button class="btn" type="button" data-act="copylink">העתקה</button></div></section>
   <section class="panel">
@@ -1423,8 +1477,12 @@ function openCustomer(id){
       <div><span>קצב אמיתי מהקניות</span><b class="num">${s.cy.learned ? s.cy.days+' ימים (לפי '+s.cy.learned+' הפרשים)' : 'עוד אין, צריך שתי קניות'}</b></div>
       <div><span>קנייה אחרונה</span><b class="num">${fmtD(lastBuy(c))}</b></div>
       <div><span>צפוי להיגמר</span><b class="num">${fmtLong(s.due)}</b></div>
-      <div><span>אישור לתזכורות</span><b>${c.consent?.source==='qr'?'נרשם לבד ב-QR':'אישר למוכר'} ב-${fmtD(c.consent?.date||today())}</b></div>
+      <div><span>אישור לתזכורות</span><b>${CONSENT_TXT[c.consent?.source]||'אישר למוכר'} ב-${fmtD(c.consent?.date||today())}</b></div>
+      ${c.extId||c.city ? `<div><span>מהקופה</span><b>${c.extId?'לקוח מס\' <span class="num">'+esc(c.extId)+'</span>':''}${c.extId&&c.city?' · ':''}${esc(c.city)}</b></div>` : ''}
+      ${s.pos ? `<div><span>תזכורת לפי הקופה</span><b class="num">${fmtLong(c.nextAt)}</b></div>` : ''}
+      ${c.note ? `<div><span>הערה</span><b>${esc(c.note)}</b></div>` : ''}
     </div>
+    ${pendingImport(c) ? `<div class="notice">הלקוח עבר מהקופה ועוד לא אישר הודעות בוואטסאפ. ההודעה הראשונה שואלת אותו. אישר לך בעל-פה? <button class="btn sm" data-act="okconsent" data-id="${c.id}">הלקוח אישר</button></div>` : ''}
     <div class="xadd" style="margin-top:0"><div class="field"><label for="dDays">כמה ימים מחזיק שק ללקוח הזה</label><input id="dDays" type="number" min="3" step="1" value="${c.daysOverride || p.days || s.cy.base}" class="num"></div><button class="btn" data-act="setdays" data-id="${c.id}">עדכון</button></div>
     <div><span class="lbl">ההודעה שתישלח</span> <a class="link" href="${esc(replyUrl(c))}" target="_blank" rel="noopener">הדגמה: מה הלקוח רואה ←</a><div class="msg" style="margin-top:6px">${esc(buildMsg(c))}</div></div>
     <div class="row">
@@ -1491,6 +1549,14 @@ document.addEventListener('click', e => {
   if (a==='pickprod'){ salePid = salePid===t.dataset.pid ? null : t.dataset.pid; document.querySelectorAll('.pick-prod').forEach(b => b.setAttribute('aria-pressed', b.dataset.pid===salePid)); saleResults($('#saleSearch').value); $('#saleSearch').focus(); return; }
   if (handleExtraAct(a, t, e)) return;
   if (handleReplyAct(a, t)) return;
+  if (a==='okconsent'){ const c = S.customers.find(x=>x.id===id); c.consent = {date:today(), source:'seller'}; save(); openCustomer(id); toast('נשמר: הלקוח אישר תזכורות'); return; }
+  if (a==='importxl'){ openImport(); return; }
+  if (/^(rcv|r[a-z]+)$/.test(a) && ['rcvopen','rcvback','rcvmanual','raihome','rai','rdel','rcancel','rok','rq','rall','rtick','radd','raddok','rfinish','rreopen','rsummary','rcopy','rsend'].includes(a)){ rcvAct(a, t); return; }
+  if (a==='watchpick'){ watchPick(); return; }
+  if (a==='watchresume'){ watchResume(); return; }
+  if (a==='watchstop'){ watchStop(); return; }
+  if (a==='watchnow'){ watchScan().then(() => toast('נבדק')); return; }
+  if (a==='doimport'){ runImport(); return; }
   if (a==='setdays'){ const c = S.customers.find(x=>x.id===id), v = Number($('#dDays').value); if (!(v>=3)){ toast('מספר ימים לא תקין'); return; } c.daysOverride = v === prod(c.productId).days ? null : v; save(); openCustomer(id); toast('עודכן. התזכורת הבאה ב'+fmtLong(addDays(status(c).due,-4))); return; }
   if (a==='o-sold'){ const c = S.customers.find(x=>x.id===id); const pid = c.pendingOrder.productId; delete c.pendingOrder; recordBuy(id, pid); route(); return; }
   if (a==='o-cancel'){ const c = S.customers.find(x=>x.id===id); delete c.pendingOrder; save(); route(); return; }
@@ -1525,8 +1591,821 @@ function syncProducts(){
   });
 }
 
+/* ---------- import customers from the POS (Excel / CSV) ---------- */
+/* rules: never deletes anything; a customer that exists (same POS number, or same mobile) is only filled in, not replaced;
+   whoever asked to be removed stays removed; rows without a mobile number are skipped and counted */
+const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function loadXLSX(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = XLSX_SRC; s.onload = () => ok(window.XLSX); s.onerror = () => bad(new Error('xlsx')); document.head.appendChild(s); });
+}
+const IMP_COLS = {
+  name:  /^(שם\s*(ה)?לקוח|שם מלא|שם)$/,
+  ext:   /^(מזהה|מס['׳".]?|מספר|קוד)\s*(ה)?לקוח$|^מזהה$|^(מס['׳".]?|מספר)\s*כרטיס/,
+  phone: /טלפון|נייד|פלאפון|סלולר|^טל['׳]?\s*\d*$/,
+  city:  /^(עיר|ישוב|יישוב)$/,
+  next:  /תאריך\s*(ה)?תזכורת|^תזכורת$/,
+  note:  /^הערה|הערות/
+};
+function impHeader(rows){
+  for (let i = 0; i < Math.min(rows.length, 15); i++){
+    const cells = (rows[i]||[]).map(x => String(x ?? '').trim());
+    const map = {phone:[]};
+    cells.forEach((h, j) => { for (const [k, re] of Object.entries(IMP_COLS)) if (re.test(h)){ if (k==='phone') map.phone.push(j); else if (map[k]===undefined) map[k] = j; break; } });
+    if (map.name !== undefined && map.phone.length) return {row:i, map};
+  }
+  return null;
+}
+/* any Israeli mobile, in any common way of writing it -> 05XXXXXXXX */
+function impMobile(v){
+  let d = String(v ?? '').replace(/\D/g, '');
+  if (d.startsWith('00972')) d = d.slice(5); else if (d.startsWith('972')) d = d.slice(3);
+  if (d.length === 9 && d.startsWith('5')) d = '0' + d;
+  return /^05\d{8}$/.test(d) ? d : null;
+}
+function impDate(v){
+  if (v instanceof Date && !isNaN(v)) return ymd(v);
+  if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * 864e5)); return ymd(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); }
+  const m = String(v ?? '').trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if (m){ let [_, dd, mm, yy] = m.map(Number); if (yy < 100) yy += 2000; const d = new Date(yy, mm-1, dd);
+    if (d.getMonth() === mm-1 && d.getDate() === dd && yy > 2000 && yy < 2100) return ymd(d); }
+  const iso = String(v ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso.slice(1).join('-');
+  return null;
+}
+/* rows (array of arrays) -> plan. existing = S.customers, removed = [{phone, ext_id}] of customers who opted out */
+function planImport(rows, existing, removed, opts){
+  const h = impHeader(rows); if (!h) return {error:'לא מצאתי עמודות של שם וטלפון. ודאו שבשורה הראשונה יש כותרות כמו "שם לקוח" ו"טלפון 1".'};
+  const {map} = h, cell = (r, j) => j === undefined ? '' : String(r[j] ?? '').trim();
+  const out = {map, total:0, groups:[], skip:{noMobile:0, noName:0, removed:0}, dupInFile:0, samples:{noMobile:[]}};
+  const byExt = new Map(), byPhone = new Map();
+  for (const r of rows.slice(h.row + 1)){
+    if (!r || r.every(x => String(x ?? '').trim() === '')) continue;
+    out.total++;
+    const name = cell(r, map.name).replace(/\s+/g, ' ').slice(0, 60);
+    const phones = [...new Set(map.phone.map(j => impMobile(r[j])).filter(Boolean))];
+    const ext = cell(r, map.ext).replace(/\.0$/, '');
+    if (!name){ out.skip.noName++; continue; }
+    if (!phones.length){ out.skip.noMobile++; if (out.samples.noMobile.length < 5) out.samples.noMobile.push(name); continue; }
+    const rec = {name, phones, ext, city:cell(r, map.city), note:cell(r, map.note), next:map.next===undefined ? null : impDate(r[map.next])};
+    /* the same customer twice in the file (same POS number or same mobile) -> one */
+    let g = (ext && byExt.get(ext)) || phones.map(p => byPhone.get(p)).find(Boolean);
+    if (g && ext && g.ext && g.ext !== ext) g = null;          // same phone but a different POS number: keep apart, decided below
+    if (g){
+      out.dupInFile++;
+      for (const p of phones) if (!g.phones.includes(p)) g.phones.push(p);
+      if (!g.ext && ext) g.ext = ext;
+      g.city ||= rec.city; if (rec.note && !g.note.includes(rec.note)) g.note = g.note ? g.note + ' | ' + rec.note : rec.note;
+      if (rec.next && (!g.next || rec.next < g.next)) g.next = rec.next;   // the earlier reminder wins
+    } else { g = {...rec}; out.groups.push(g); }
+    if (g.ext) byExt.set(g.ext, g);
+    for (const p of g.phones) if (!byPhone.has(p)) byPhone.set(p, g);
+  }
+  const exExt = new Map(existing.filter(c => c.extId).map(c => [c.extId, c]));
+  const exPhone = new Map(existing.map(c => [c.phone, c]));
+  const rmPhone = new Set(removed.map(x => x.phone)), rmExt = new Set(removed.filter(x => x.ext_id).map(x => x.ext_id));
+  const usedPhone = new Set(existing.map(c => c.phone)), usedExt = new Set(existing.filter(c => c.extId).map(c => c.extId));
+  out.adds = []; out.updates = []; out.same = 0; out.conflicts = [];
+  for (const g of out.groups){
+    if ((g.ext && rmExt.has(g.ext)) || g.phones.some(p => rmPhone.has(p))){ out.skip.removed++; continue; }
+    const c = (g.ext && exExt.get(g.ext)) || g.phones.map(p => exPhone.get(p)).find(Boolean);
+    if (c){
+      const ch = {};
+      if (g.ext && !c.extId && !usedExt.has(g.ext)) ch.extId = g.ext;
+      else if (g.ext && c.extId && c.extId !== g.ext){ out.conflicts.push(`${g.name}: הטלפון כבר שייך ללקוח אחר (מס' ${c.extId})`); continue; }
+      if (g.city && !c.city) ch.city = g.city;
+      if (g.note && g.note !== c.note && !(c.note||'').includes(g.note)) ch.note = c.note ? c.note + ' | ' + g.note : g.note;
+      if (g.next && g.next !== c.nextAt) ch.nextAt = g.next;
+      if (Object.keys(ch).length){ out.updates.push({c, ch}); if (ch.extId) usedExt.add(ch.extId); } else out.same++;
+      continue;
+    }
+    const phone = g.phones.find(p => !usedPhone.has(p));
+    if (!phone){ out.conflicts.push(`${g.name}: המספר כבר רשום אצל לקוח אחר`); continue; }
+    if (g.ext && usedExt.has(g.ext)){ out.conflicts.push(`${g.name}: מס' לקוח ${g.ext} כבר קיים`); continue; }
+    usedPhone.add(phone); if (g.ext) usedExt.add(g.ext);
+    out.adds.push({id:uid(), name:g.name, phone, pet:opts.pet, petName:'', size:PETS[opts.pet].def, count:1, productId:opts.pid,
+      daysOverride:null, extId:g.ext, city:g.city, note:g.note, nextAt:g.next, nextSet:g.next ? today() : null,
+      consent:{date:today(), source:'import'}, purchases:[], reminders:[], extras:[]});
+  }
+  return out;
+}
+function applyImport(plan){
+  for (const {c, ch} of plan.updates){ Object.assign(c, ch); if (ch.nextAt) c.nextSet = today(); }
+  S.customers.push(...plan.adds);
+}
+
+let impPlan = null, impRows = null;
+function openImport(){
+  const dogP = S.products.find(p => p.kind==='dog') || S.products[0];
+  modal(`<span class="eyebrow">ייבוא לקוחות</span><h2 id="mTitle">ייבוא מהקופה (אקסל)</h2>
+    <p class="sub">מוציאים מהקופה דוח לקוחות או דוח תזכורות לאקסל, ומעלים אותו כאן. שום לקוח קיים לא נמחק ולא מוחלף: לקוח שכבר רשום רק מתעדכן, ומי שביקש להסיר לא חוזר.</p>
+    <label class="dropzone" id="impDrop" for="impFile"><b>גררו לכאן את הקובץ מהקופה</b><span>או לחצו לבחירה · Excel או CSV</span><span class="dz-name" id="impName"></span></label>
+    <input id="impFile" type="file" accept=".xls,.xlsx,.csv" class="sr-only">
+    <div class="grid2">
+      <div class="field"><label for="impPet">החיה של רוב הלקוחות</label><select id="impPet">${Object.entries(PETS).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>
+      <div class="field"><label for="impProd">מוצר ברירת מחדל</label><select id="impProd">${optionsFor('dog', dogP?.id)}</select></div>
+    </div>
+    <p class="hint">אפשר לשנות לכל לקוח אחר כך. בקנייה הבאה (סריקה בקופה) המוצר מתעדכן לבד.</p>
+    <div id="impOut" aria-live="polite"></div>
+    <div class="row"><button class="btn primary" data-act="doimport" id="impGo" disabled>ייבוא</button><button class="btn" data-act="close">ביטול</button></div>`);
+  $('#impPet').onchange = e => { $('#impProd').innerHTML = optionsFor(e.target.value); impPreview(); };
+  $('#impProd').onchange = impPreview;
+  $('#impFile').onchange = e => impLoad(e.target.files[0]);
+  const z = $('#impDrop');
+  z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
+  z.addEventListener('dragleave', () => z.classList.remove('over'));
+  z.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); z.classList.remove('over'); impLoad(e.dataTransfer.files[0]); });
+  const def = impDefaults(); if (def.pet && PETS[def.pet]){ $('#impPet').value = def.pet; $('#impProd').innerHTML = optionsFor(def.pet, def.pid); }
+}
+const impOkName = f => f && /\.(xlsx?|csv)$/i.test(f.name);
+async function impReadRows(f){
+  const X = await loadXLSX();
+  const wb = X.read(await f.arrayBuffer(), {type:'array', cellDates:true});
+  return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true, defval:''});
+}
+async function impLoad(f){
+  if (!f) return;
+  if (!impOkName(f)){ $('#impOut').innerHTML = '<div class="err">צריך קובץ Excel (xls / xlsx) או CSV.</div>'; return; }
+  $('#impName').textContent = f.name;
+  $('#impOut').innerHTML = '<p class="sub">קורא את הקובץ…</p>';
+  try { impRows = await impReadRows(f); impPreview(); }
+  catch(err){ console.error(err); impRows = null; $('#impOut').innerHTML = '<div class="err">לא הצלחתי לקרוא את הקובץ. נסו לשמור אותו מחדש כ-xlsx.</div>'; }
+}
+/* the animal + product chosen last time are used again (also by the automatic folder) */
+const impDefKey = () => 'neeman-imp-def-' + S.store.id;
+function impDefaults(){ try { return JSON.parse(localStorage.getItem(impDefKey()) || '{}'); } catch(e){ return {}; } }
+function impSaveDefaults(o){ try { localStorage.setItem(impDefKey(), JSON.stringify(o)); } catch(e){} }
+async function impRemoved(){
+  if (!sb) return [];
+  const {data, error} = await sb.from('customers').select('phone,ext_id').eq('store_id', S.store.id).eq('opted_out', true).limit(20000);
+  if (error) throw error; return data || [];
+}
+async function impPreview(){
+  if (!impRows) return;
+  const opts = {pet:$('#impPet').value, pid:$('#impProd').value};
+  impSaveDefaults(opts);
+  if (!opts.pid){ $('#impOut').innerHTML = '<div class="err">אין מוצר לחיה הזאת. הוסיפו מוצר בהגדרות.</div>'; return; }
+  let removed; try { removed = await impRemoved(); } catch(e){ $('#impOut').innerHTML = '<div class="err">אין חיבור לשרת. נסו שוב.</div>'; return; }
+  impPlan = planImport(impRows, S.customers, removed, opts);
+  const P = impPlan;
+  if (P.error){ $('#impOut').innerHTML = `<div class="err">${esc(P.error)}</div>`; $('#impGo').disabled = true; return; }
+  const li = (n, t) => n ? `<li><span>${t}</span><b class="num">${n}</b></li>` : '';
+  $('#impOut').innerHTML = `<ul class="hist">
+      <li><span>שורות בקובץ</span><b class="num">${P.total}</b></li>
+      ${li(P.adds.length, 'לקוחות חדשים שייכנסו')}
+      ${li(P.updates.length, 'לקוחות קיימים שיתעדכנו (בלי למחוק כלום)')}
+      ${li(P.same, 'כבר רשומים, אין מה לעדכן')}
+      ${li(P.dupInFile, 'שורות כפולות בקובץ (אוחדו)')}
+      ${li(P.skip.noMobile, 'בלי מספר נייד (דילגתי)')}
+      ${li(P.skip.noName, 'בלי שם (דילגתי)')}
+      ${li(P.skip.removed, 'ביקשו בעבר להסיר (לא יחזרו)')}
+      ${li(P.conflicts.length, 'סתירות (לא יובאו)')}
+    </ul>
+    ${P.samples.noMobile.length ? `<p class="hint">בלי נייד, למשל: ${P.samples.noMobile.map(esc).join(', ')}</p>` : ''}
+    ${P.conflicts.length ? `<details class="more"><summary>הסתירות</summary><ul class="hist">${P.conflicts.slice(0,50).map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
+    <p class="hint">הלקוחות החדשים מסומנים "עוד לא אישר". ההודעה הראשונה שלהם שואלת אם הם רוצים תזכורות בוואטסאפ.</p>`;
+  $('#impGo').disabled = !(P.adds.length || P.updates.length);
+  $('#impGo').textContent = `ייבוא (${P.adds.length} חדשים, ${P.updates.length} עדכונים)`;
+}
+/* all or nothing: saved right away; if the server refuses, the screen goes back to what is really saved */
+async function runImport(){
+  if (!impPlan || impPlan.error) return;
+  const n = impPlan.adds.length, u = impPlan.updates.length;
+  $('#impGo').disabled = true; $('#impGo').textContent = 'שומר…';
+  clearTimeout(syncTimer); pendingSave = false;
+  try { await syncChain; } catch(e){}
+  const plan = impPlan; impPlan = null; impRows = null;
+  const err = await commitImport(plan);
+  closeDrawer(); route();
+  toast(err ? 'הייבוא לא נשמר ('+err+'). לא השתנה כלום, אפשר לנסות שוב.' : `יובאו ${n} לקוחות חדשים ועודכנו ${u}. שום דבר לא נמחק.`);
+}
+async function commitImport(plan){
+  applyImport(plan);
+  try { await syncNow(); return null; }
+  catch(e){
+    console.error(e);
+    try { const {data:store} = await sb.from('stores').select('*').eq('id', S.store.id).single(); await loadAll(store); } catch(_){}
+    return e.message || 'שגיאה';
+  }
+}
+
+/* ---------- automatic import folder ----------
+   The store picks a folder once (Chrome / Edge on the computer). While the app is open it looks there every 30 seconds:
+   a new Excel file is imported and moved to the sub-folder "יובא". A file that can't be read goes to "לא נקלט". */
+const FS_OK = 'showDirectoryPicker' in window;
+const IDB = (fn) => new Promise((ok, bad) => { const r = indexedDB.open('neeman-fs', 1); r.onupgradeneeded = () => r.result.createObjectStore('h');
+  r.onsuccess = () => { const tx = r.result.transaction('h', 'readwrite'); const q = fn(tx.objectStore('h')); tx.oncomplete = () => ok(q && q.result); tx.onerror = () => bad(tx.error); }; r.onerror = () => bad(r.error); });
+const dirKey = () => 'dir-' + S.store.id;
+let watchDir = null, watchState = 'off', watchBusy = false;
+const impLogKey = () => 'neeman-imp-log-' + S.store.id;
+function impLog(){ try { return JSON.parse(localStorage.getItem(impLogKey()) || '[]'); } catch(e){ return []; } }
+function impLogAdd(x){ try { localStorage.setItem(impLogKey(), JSON.stringify([{at:new Date().toISOString(), ...x}, ...impLog()].slice(0, 15))); } catch(e){} }
+async function watchInit(){
+  if (!FS_OK || !S) return;
+  try { watchDir = await IDB(st => st.get(dirKey())); } catch(e){ watchDir = null; }
+  if (!watchDir){ watchState = 'off'; return; }
+  const perm = await watchDir.queryPermission({mode:'readwrite'}).catch(() => 'denied');
+  watchState = perm === 'granted' ? 'on' : 'needs';
+  if (watchState === 'on') watchScan();
+}
+async function watchPick(){
+  try {
+    const d = await window.showDirectoryPicker({id:'neeman-import', mode:'readwrite'});
+    watchDir = d; await IDB(st => st.put(d, dirKey())); watchState = 'on';
+    toast('מעכשיו כל קובץ אקסל שיישמר בתיקייה "'+d.name+'" ייקלט לבד.');
+    await watchScan(); if ((location.hash||'') === '#setup') route();
+  } catch(e){ if (e.name !== 'AbortError') toast('לא הצלחתי לחבר את התיקייה'); }
+}
+async function watchResume(){
+  if (!watchDir) return;
+  const p = await watchDir.requestPermission({mode:'readwrite'}).catch(() => 'denied');
+  watchState = p === 'granted' ? 'on' : 'needs';
+  if (watchState === 'on'){ toast('הייבוא האוטומטי פעיל'); await watchScan(); }
+  route();
+}
+async function watchStop(){ watchDir = null; watchState = 'off'; try { await IDB(st => st.delete(dirKey())); } catch(e){} route(); }
+async function moveTo(dir, sub, name, file){
+  const d = await dir.getDirectoryHandle(sub, {create:true});
+  let target = name;
+  try { await d.getFileHandle(target); target = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-') + ' ' + name; } catch(e){}
+  const h = await d.getFileHandle(target, {create:true}); const w = await h.createWritable(); await w.write(file); await w.close();
+  await dir.removeEntry(name);
+}
+async function watchScan(){
+  if (watchState !== 'on' || !watchDir || watchBusy || !S || syncing || pendingSave || trimBusy) return;
+  if ($('#overlayRoot').innerHTML) return;            // someone is working on the screen: try next round
+  watchBusy = true;
+  try {
+    for await (const [name, h] of watchDir.entries()){
+      if (h.kind !== 'file' || !/\.(xlsx?|csv)$/i.test(name) || name.startsWith('~$')) continue;   // ~$ = Excel still has it open
+      const f = await h.getFile();
+      if (Date.now() - f.lastModified < 5000) continue;                                              // still being written
+      let rows, plan;
+      try { rows = await impReadRows(f); } catch(e){ rows = null; }
+      const def = impDefaults(), pet = PETS[def.pet] ? def.pet : 'dog';
+      const pid = S.products.some(p => p.id === def.pid) ? def.pid : (S.products.find(p => kindsFor(pet).includes(p.kind)) || S.products[0])?.id;
+      if (rows){ const removed = await impRemoved(); plan = planImport(rows, S.customers, removed, {pet, pid}); }
+      if (!rows || plan.error){
+        await moveTo(watchDir, 'לא נקלט', name, f).catch(() => {});
+        impLogAdd({file:name, ok:false, msg: rows ? 'לא נמצאו עמודות שם וטלפון' : 'הקובץ לא נקרא'});
+        toast('הקובץ \u2068'+name+'\u2069 לא נקלט. הועבר לתיקייה "לא נקלט".');
+        continue;
+      }
+      const err = (plan.adds.length || plan.updates.length) ? await commitImport(plan) : null;
+      if (err){ impLogAdd({file:name, ok:false, msg:'שגיאת שמירה: '+err}); toast('ייבוא אוטומטי נכשל, ננסה שוב בעוד רגע'); break; }   // file stays: retried next round
+      await moveTo(watchDir, 'יובא', name, f).catch(e => console.error(e));
+      impLogAdd({file:name, ok:true, adds:plan.adds.length, upd:plan.updates.length, skip:plan.skip.noMobile + plan.skip.noName + plan.skip.removed, conf:plan.conflicts.length});
+      toast(`ייבוא אוטומטי: \u2068${name}\u2069 · ${plan.adds.length} חדשים, ${plan.updates.length} עודכנו`);
+      if (!$('#overlayRoot').innerHTML) route();
+    }
+  } catch(e){
+    console.error(e);
+    if (e.name === 'NotAllowedError' || e.name === 'NotFoundError'){ watchState = 'needs'; }
+  } finally { watchBusy = false; }
+}
+setInterval(() => watchScan(), 30000);
+function watchHTML(){
+  if (!FS_OK) return `<p class="sub">ייבוא אוטומטי מתיקייה עובד בכרום או באדג' במחשב. בטאבלט אפשר לייבא ידנית במסך "לקוחות".</p>`;
+  const log = impLog();
+  const st = watchState === 'on' ? `<span class="pill st-ok">פעיל</span> התיקייה: <b>${esc(watchDir?.name||'')}</b>`
+           : watchState === 'needs' ? `<span class="pill st-due">מחכה לאישור</span> הדפדפן צריך אישור מחדש לתיקייה <b>${esc(watchDir?.name||'')}</b>`
+           : '<span class="pill">כבוי</span>';
+  return `<p class="sub">בוחרים פעם אחת תיקייה, למשל "נאמן – ייבוא" על שולחן העבודה, ושומרים לשם את הדוח מהקופה. כל עוד נאמן פתוח במחשב, כל קובץ חדש נקלט לבד תוך חצי דקה ועובר לתת-תיקייה "יובא".</p>
+    <p style="margin:10px 0">${st}</p>
+    <div class="row">${watchState === 'on' ? `<button class="btn" type="button" data-act="watchnow">לבדוק עכשיו</button><button class="btn" type="button" data-act="watchpick">החלפת תיקייה</button><button class="btn danger" type="button" data-act="watchstop">כיבוי</button>`
+      : watchState === 'needs' ? `<button class="btn primary" type="button" data-act="watchresume">אישור והפעלה</button><button class="btn danger" type="button" data-act="watchstop">כיבוי</button>`
+      : `<button class="btn primary" type="button" data-act="watchpick">בחירת תיקייה</button>`}</div>
+    ${log.length ? `<details class="more" style="margin-top:12px"><summary>קבצים אחרונים (${log.length})</summary><ul class="hist">${log.map(x => `<li><span>${fmtD(x.at.slice(0,10))} · ${esc(x.file)}</span><b>${x.ok ? `${x.adds} חדשים · ${x.upd} עודכנו${x.conf?' · '+x.conf+' סתירות':''}` : esc(x.msg)}</b></li>`).join('')}</ul></details>` : ''}`;
+}
+
+/* ---------- goods receiving: photo of the delivery note -> list -> tick (or scan) what arrived -> message to the supplier ---------- */
+const RCV = {loaded:false, list:[], sup:[], alias:[], cur:null, busy:false};
+const normName = s => String(s||'').replace(/["'״׳]/g,'').replace(/\s+/g,' ').trim();
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+function loadScript(src, test){ if (test()) return Promise.resolve(); return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('load')); document.head.appendChild(s); }); }
+
+async function rcvLoad(){
+  const sid = S.store.id;
+  const [r, s, a] = await Promise.all([
+    sb.from('receipts').select('*').eq('store_id', sid).order('created_at', {ascending:false}).limit(40),
+    sb.from('suppliers').select('*').eq('store_id', sid).order('name'),
+    sb.from('supplier_aliases').select('*').eq('store_id', sid)
+  ]);
+  for (const x of [r, s, a]) if (x.error) throw x.error;
+  RCV.list = r.data; RCV.sup = s.data; RCV.alias = a.data; RCV.loaded = true;
+  if (RCV.list.length){
+    const {data, error} = await sb.from('receipt_items').select('receipt_id,qty_ordered,qty_received,extra').in('receipt_id', RCV.list.map(x => x.id));
+    if (!error){ const g = {}; for (const i of data) (g[i.receipt_id] ||= []).push(i); RCV.list.forEach(x => x._items = g[x.id] || []); }
+  }
+}
+async function rcvOpen(id){
+  const {data, error} = await sb.from('receipt_items').select('*').eq('receipt_id', id).order('pos');
+  if (error){ toast('לא הצלחתי לפתוח'); return; }
+  RCV.cur = {...RCV.list.find(x => x.id === id), items:data};
+  rcvRender();
+}
+const lineState = i => i.extra ? 'extra' : i.qty_received >= i.qty_ordered && i.qty_ordered > 0 ? (i.qty_received > i.qty_ordered ? 'over' : 'ok') : i.qty_received > 0 ? 'part' : 'none';
+const LINE_TXT = {ok:'הגיע', part:'חסר חלק', none:'לא הגיע', over:'הגיע יותר', extra:'לא הוזמן'};
+function rcvCounts(items){
+  const real = items.filter(i => !i.extra);
+  return {total:real.length, ok:real.filter(i => i.qty_received >= i.qty_ordered).length,
+          missing:real.filter(i => i.qty_received < i.qty_ordered), extra:items.filter(i => i.extra || i.qty_received > i.qty_ordered)};
+}
+
+views.receive = () => `<div id="rcvBody"><section class="panel"><p class="sub">טוען…</p></section></div>`;
+async function rcvRender(){
+  const el = $('#rcvBody'); if (!el) return;
+  if (!RCV.loaded){ try { await rcvLoad(); } catch(e){ el.innerHTML = '<section class="panel"><div class="err">לא הצלחתי לטעון. בדקו את האינטרנט.</div></section>'; return; } }
+  el.innerHTML = RCV.cur ? rcvDocHTML() : rcvHomeHTML();
+  if (!RCV.cur){
+    $('#rcvCam').onchange = e => { const f = [...e.target.files]; e.target.value = ''; rcvFiles(f, 'photo'); };
+    $('#rcvFile').onchange = e => { const f = [...e.target.files]; e.target.value = ''; rcvFiles(f); };
+    const z = $('#rcvDrop');
+    z.ondragover = e => { e.preventDefault(); z.classList.add('over'); };
+    z.ondragleave = () => z.classList.remove('over');
+    z.ondrop = e => { e.preventDefault(); z.classList.remove('over'); rcvFiles([...e.dataTransfer.files]); };
+  } else {
+    el.querySelectorAll('[data-f]').forEach(inp => inp.onchange = () => rcvField(inp));
+    el.querySelectorAll('[data-f2]').forEach(inp => inp.onchange = () => { const i = RCV.cur.items.find(x => x.id === inp.dataset.id); if (!i) return;
+      const f2 = inp.dataset.f2, v = inp.value.trim();
+      i[f2] = f2 === 'qty_ordered' ? Math.max(0, Number(v) || 0) : f2 === 'unit_price' ? (v === '' ? null : Math.max(0, Number(v) || 0)) : v.slice(0, 200) || i.name;
+      if (f2 === 'name') i._fixed = false; rcvSaveItem(i); if (f2 === 'unit_price' && RCV.cur.status !== 'draft') toast('המחיר עודכן'); });
+  }
+}
+function rcvHomeHTML(){
+  const rows = RCV.list.map(r => { const c = rcvCounts(r._items || []);
+    return `<li><button class="link" data-act="rcvopen" data-id="${r.id}">${esc(r.supplier_name || 'ספק לא ידוע')}${r.doc_no ? ' · מס\' '+esc(r.doc_no) : ''}</button>
+      <span class="sub">${fmtD(r.created_at.slice(0,10))}</span>
+      <b>${r.status==='draft' ? '<span class="pill">בבדיקה</span>' : r.status==='done' ? (c.missing.length ? `<span class="pill st-overdue">נסגר · חסרו ${c.missing.length}</span>` : '<span class="pill st-ok">נסגר · הכל הגיע</span>') : `<span class="pill st-due">פתוח · ${c.ok}/${c.total}</span>`}</b></li>`; }).join('');
+  return `<section class="panel">
+    <h2>קבלת סחורה</h2>
+    <p class="sub">מצלמים את תעודת המשלוח, ומקבלים רשימה של מה שאמור להגיע. סורקים כל מוצר שיוצא מהארגז (או לוחצים ✓), ובסוף רואים מה חסר ושולחים לספק.</p>
+    <div class="rcv-start">
+      <label class="btn primary big" for="rcvCam">📷 צילום תעודת משלוח</label>
+      <input id="rcvCam" type="file" accept="image/*" capture="environment" multiple class="sr-only">
+      <label class="dropzone" id="rcvDrop" for="rcvFile"><b>או גררו לכאן קובץ</b><span>תמונה, PDF או אקסל מהספק · עד 4 עמודים</span></label>
+      <input id="rcvFile" type="file" accept="image/*,.pdf,.xls,.xlsx,.csv" multiple class="sr-only">
+      <button class="btn" data-act="rcvmanual">רשימה ידנית בלי מסמך</button>
+    </div>
+    <div id="rcvMsg" aria-live="polite"></div>
+  </section>
+  <section class="panel"><h2>קבלות אחרונות</h2>
+    ${rows ? `<ul class="hist rcv-list">${rows}</ul>` : '<div class="empty">עוד לא נקלטה סחורה.</div>'}
+  </section>`;
+}
+function rcvReadBanner(r){
+  const ri = r.read_info || {};
+  if (ri.how === 'ocr'){
+    const chk = ri.check === 'match' ? `<b style="color:var(--ok)">✓ סכום השורות (${money(ri.sum)}) תואם לסה"כ בתעודה</b>`
+      : ri.check === 'mismatch' ? `<b style="color:var(--warn)">⚠ סכום השורות ${money(ri.sum)}, ובתעודה ${money(ri.net)}. כדאי לבדוק</b>` : 'השוו בקצרה לתעודה';
+    const sup = ri.known ? `זיהיתי את הספק לפי התבנית שלמדתי (${ri.learnedFrom} תעודות)${ri.fixed ? `, ותיקנתי ${ri.fixed} שמות` : ''}.` : 'ספק חדש: אחרי האישור אלמד את התבנית שלו, ובפעם הבאה הקריאה תהיה מדויקת יותר.';
+    return `<div class="read-banner"><span class="pill st-ok">נקרא בטלפון · בלי AI · חינם</span> ${chk}<br><span class="sub">${sup}</span></div>`;
+  }
+  if (ri.how === 'ai') return `<div class="read-banner"><span class="pill st-due">נקרא עם AI</span> <span class="sub">אחרי האישור אלמד את התבנית, ובפעם הבאה אקרא בחינם.</span></div>`;
+  if (ri.how === 'excel') return `<div class="read-banner"><span class="pill st-ok">נקרא מהאקסל · בחינם</span></div>`;
+  return '';
+}
+function rcvDraftHTML(){
+  const r = RCV.cur;
+  return `<section class="panel">
+    <div class="row"><button class="btn" data-act="rcvback">→ כל הקבלות</button><span class="spacer"></span><span class="pill">בבדיקה</span></div>
+    <h2 style="margin-top:10px">בדיקת הרשימה</h2>
+    <p class="sub">השוו בקצרה לתעודה ותקנו אם משהו נקרא לא נכון. אחרי האישור הרשימה ננעלת, ואז רק מסמנים ✓ מה הגיע.</p>
+    ${rcvReadBanner(r)}
+    <div class="grid3" style="margin-top:12px">
+      <div class="field"><label for="rSup">ספק</label><input id="rSup" data-f="supplier_name" value="${esc(r.supplier_name||'')}" list="supList"><datalist id="supList">${RCV.sup.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist></div>
+      <div class="field"><label for="rNo">מס' תעודה</label><input id="rNo" data-f="doc_no" value="${esc(r.doc_no||'')}"></div>
+      <div class="field"><label for="rDate">תאריך</label><input id="rDate" type="date" data-f="doc_date" value="${esc(r.doc_date||'')}"></div>
+    </div>
+  </section>
+  <section class="panel"><div class="rcv-lines">${r.items.map(i => `
+    <div class="rcv-line draft" id="rl-${i.id}">
+      <div class="rl-main"><input class="dl-name" data-f2="name" data-id="${i.id}" value="${esc(i.name)}" aria-label="שם המוצר">${i.code ? ` <span class="sub num" dir="ltr">${esc(i.code)}</span>` : ''}${i._fixed ? ' <span class="pill st-ok" title="השם תוקן לפי מה שנלמד">תוקן</span>' : ''}</div>
+      <div class="rl-qty"><label class="sub" for="dq-${i.id}">כמות</label><input id="dq-${i.id}" class="dl-qty num" type="number" min="0" step="any" data-f2="qty_ordered" data-id="${i.id}" value="${i.qty_ordered}">
+        <label class="sub" for="dp-${i.id}">מחיר ₪</label><input id="dp-${i.id}" class="dl-qty num" type="number" min="0" step="0.01" data-f2="unit_price" data-id="${i.id}" value="${i.unit_price ?? ''}" placeholder="—">
+        <button class="btn sm danger" data-act="rdel" data-id="${i.id}" aria-label="מחיקת השורה">✕</button></div>
+    </div>`).join('') || '<div class="empty">אין שורות</div>'}</div>
+    <div class="row" style="margin-top:12px"><button class="btn" data-act="radd">+ שורה</button>${r.source === 'ocr' && RCV.pages?.length ? '<button class="btn" data-act="rai">לא נקרא טוב? קריאה עם AI</button>' : ''}<button class="btn danger" data-act="rcancel">ביטול הקבלה</button><span class="spacer"></span>
+      <button class="btn primary big" data-act="rok">✓ הרשימה נכונה, מתחילים לסמן</button></div>
+  </section>`;
+}
+function rcvDocHTML(){
+  if (RCV.cur.status === 'draft') return rcvDraftHTML();
+  const r = RCV.cur, c = rcvCounts(r.items), done = r.status === 'done';
+  const pct = c.total ? Math.round(c.ok / c.total * 100) : 0;
+  const opts = sel => `<option value="">— לא מקושר —</option>` + S.products.map(p => `<option value="${p.id}" ${p.id===sel?'selected':''}>${esc(p.name)} ${p.kg} ק"ג</option>`).join('');
+  return `<section class="panel">
+    <div class="row"><button class="btn" data-act="rcvback">→ כל הקבלות</button><span class="spacer"></span>${done ? '<span class="pill st-ok">נסגר</span>' : ''}</div>
+    <div class="grid3" style="margin-top:12px">
+      <div class="field"><label for="rSup">ספק</label><input id="rSup" data-f="supplier_name" value="${esc(r.supplier_name||'')}" list="supList" ${done?'disabled':''}><datalist id="supList">${RCV.sup.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist></div>
+      <div class="field"><label for="rNo">מס' תעודה</label><input id="rNo" data-f="doc_no" value="${esc(r.doc_no||'')}" ${done?'disabled':''}></div>
+      <div class="field"><label for="rDate">תאריך</label><input id="rDate" type="date" data-f="doc_date" value="${esc(r.doc_date||'')}" ${done?'disabled':''}></div>
+    </div>
+    <div class="rcv-prog"><div style="width:${pct}%"></div></div>
+    <p class="sub"><b class="num">${c.ok}</b> מתוך <b class="num">${c.total}</b> שורות הגיעו במלואן${c.missing.length ? ` · <span style="color:var(--danger)">חסרות ${c.missing.length}</span>` : ''}${c.extra.length ? ` · ${c.extra.length} הגיעו בלי שהוזמנו / יותר מדי` : ''}</p>
+    ${done ? '' : '<p class="hint">מסמנים ✓ ליד כל מוצר שהגיע (או סורקים אותו). הגיע רק חלק? משנים את הכמות ב- − / +. שורות מהתעודה נעולות ולא נמחקות.</p>'}
+  </section>
+  <section class="panel"><div class="rcv-lines">${r.items.map(i => { const st = lineState(i); return `
+    <div class="rcv-line st-${st}" id="rl-${i.id}">
+      <button class="rl-check ${i.qty_received >= i.qty_ordered && i.qty_ordered > 0 ? 'on' : ''}" data-act="rtick" data-id="${i.id}" ${done||i.extra?'disabled':''} role="checkbox" aria-checked="${i.qty_received >= i.qty_ordered && i.qty_ordered > 0}" aria-label="הגיע: ${esc(i.name)}">✓</button>
+      <div class="rl-main"><b>${esc(i.name)}</b>${i.code ? ` <span class="sub num" dir="ltr">${esc(i.code)}</span>` : ''}
+        <span class="pill rl-st">${LINE_TXT[st]}</span>
+        <div class="rl-link"><select data-f="product_id" data-id="${i.id}" aria-label="המוצר אצלך" ${done?'disabled':''}>${opts(i.product_id)}</select></div></div>
+      <div class="rl-qty">
+        <span class="sub">הוזמנו <b class="num">${i.qty_ordered}</b></span>
+        <label class="rl-price sub">₪<input class="num" type="number" min="0" step="0.01" data-f2="unit_price" data-id="${i.id}" value="${i.unit_price ?? ''}" placeholder="מחיר" ${done?'disabled':''} aria-label="מחיר ליחידה"></label>
+        <div class="stepper"><button class="btn sm" data-act="rq" data-id="${i.id}" data-d="-1" ${done?'disabled':''} aria-label="פחות">−</button><b class="num" aria-label="הגיעו">${i.qty_received}</b><button class="btn sm" data-act="rq" data-id="${i.id}" data-d="1" ${done?'disabled':''} aria-label="עוד אחד">+</button></div>
+      </div></div>`; }).join('') || '<div class="empty">אין שורות</div>'}</div>
+    ${done ? '' : `<div class="row" style="margin-top:12px"><button class="btn" data-act="radd">+ שורה</button><span class="spacer"></span><button class="btn primary big" data-act="rfinish">סיום קבלה</button></div>`}
+    ${done ? `<div class="row" style="margin-top:12px"><button class="btn" data-act="rsummary">סיכום והודעה לספק</button><button class="btn" data-act="rreopen">פתיחה מחדש</button></div>` : ''}
+  </section>`;
+}
+
+/* ---- reading the document ---- */
+function imgToJpeg(src, max=1600){
+  return new Promise((ok, bad) => { const im = new Image(); im.onload = () => {
+    const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas');
+    c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    ok({type:'image/jpeg', data:c.toDataURL('image/jpeg', 0.82).split(',')[1]}); }; im.onerror = () => bad(new Error('img')); im.src = src; });
+}
+async function pdfPages(f){
+  await loadScript(PDFJS, () => window.pdfjsLib);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.replace('pdf.min.js','pdf.worker.min.js');
+  const pdf = await pdfjsLib.getDocument({data: await f.arrayBuffer()}).promise, out = [];
+  for (let n = 1; n <= Math.min(pdf.numPages, 4); n++){
+    const page = await pdf.getPage(n), v = page.getViewport({scale:1}), sc = 1600 / Math.max(v.width, v.height);
+    const vp = page.getViewport({scale:sc}), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    await page.render({canvasContext:c.getContext('2d'), viewport:vp}).promise;
+    out.push({type:'image/jpeg', data:c.toDataURL('image/jpeg', 0.85).split(',')[1]});
+  }
+  return out;
+}
+const RCV_COLS = {name:/תיאור|פריט|מוצר|שם/, qty:/כמות|כמ['׳]|יחידות/, price:/מחיר/, code:/ברקוד|מק["״]?ט|מקט|קוד/};
+function rowsToDoc(rows){
+  for (let h = 0; h < Math.min(rows.length, 20); h++){
+    const cells = (rows[h]||[]).map(x => String(x ?? '').trim()), m = {};
+    cells.forEach((t, j) => { for (const [k, re] of Object.entries(RCV_COLS)) if (m[k] === undefined && re.test(t)){ m[k] = j; break; } });
+    if (m.name !== undefined && m.qty !== undefined){
+      const items = rows.slice(h+1).map(r => ({name:String(r[m.name] ?? '').trim(), qty:Number(String(r[m.qty] ?? '').replace(/[^\d.]/g,''))||0,
+        unit_price: m.price===undefined ? null : (Number(String(r[m.price] ?? '').replace(/[^\d.]/g,''))||null),
+        code: m.code===undefined ? null : (String(r[m.code] ?? '').replace(/\D/g,'') || null)})).filter(x => x.name && x.qty > 0);
+      return {supplier:null, doc_no:null, doc_date:null, items, unreadable:!items.length};
+    }
+  }
+  return {unreadable:true, items:[]};
+}
+/* ---- reading a supplier document from OCR text, and learning each supplier's template (no AI) ---- */
+const HEB = /[֐-׿]/;
+const ocrNorm = s => String(s||'').replace(/[‎‏‪-‮]/g,'').replace(/[|\[\]{}₪©®™_]/g,' ').replace(/[״“”]/g,'"').replace(/[׳‘’`]/g,"'").replace(/\s+/g,' ').trim();
+const nameKey = s => String(s||'').replace(/["'״׳.,:;()\-–]/g,'').replace(/\s+/g,' ').trim();
+const toNum = t => { const m = String(t).replace(/,(?=\d{3}\b)/g,'').match(/^-?\d+(?:\.\d+)?$/); return m ? Number(m[0]) : null; };
+const isCode = t => /^\d{5,14}$/.test(t);
+const SKIP_LINE = /סה"?כ|מע"?מ|לתשלום|תאריך|טל['׳]?|פקס|כתובת|לכבוד|חתימת|ח\.?\s?פ|ע\.?\s?מ\.?|עוסק|תעודת|חשבונית|הזמנה מס|עמוד|^רח['׳]/;
+const UNIT = /^(יח['׳"]?|יחידות|יח'?|קרט['׳]?|קרטון|שק|ק"?ג|קג|ליטר|ל['׳]|ארגז|חב['׳]?|מארז|ית|n)$/;
+function tokenSim(a, b){ const A = new Set(nameKey(a).split(' ').filter(Boolean)), B = new Set(nameKey(b).split(' ').filter(Boolean)); if (!A.size || !B.size) return 0; let n = 0; A.forEach(x => B.has(x) && n++); return n / Math.max(A.size, B.size); }
+function lev(a, b){ if (a === b) return 0; const m = a.length, n = b.length; if (!m || !n) return m || n; let prev = Array.from({length:n+1}, (_, j) => j);
+  for (let i = 1; i <= m; i++){ const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); prev = cur; } return prev[n]; }
+const heb = s => String(s||'').replace(/[^א-ת ]/g,'').replace(/\s+/g,' ').trim();
+/* how alike two Hebrew strings are, letter by letter (survives OCR mistakes like ח↔ת) */
+function charSim(a, b){ a = heb(a); b = heb(b); if (!a || !b) return 0; if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length) >= 0.5 ? 0.95 : 0.6;
+  return 1 - lev(a, b) / Math.max(a.length, b.length); }
+const close = (a, b) => Math.abs(a - b) <= Math.max(0.05, Math.abs(b) * 0.012);
+
+function docHeader(lines){
+  const all = lines.join('\n'), out = {};
+  const hp = all.match(/(?:ח\.?\s?פ\.?|ע\.?\s?מ\.?|עוסק(?: מורשה)?|ח"פ)\D{0,6}(\d{8,9})\b/); if (hp) out.hp = hp[1];
+  const no = all.match(/(?:תעודת משלוח|ת\.?\s?משלוח|חשבונית(?: מס)?(?: קבלה)?|הזמנה|מסמך)[^\d\n]{0,12}(\d{3,12})/); if (no) out.doc_no = no[1];
+  const d = all.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if (d){ let [_, dd, mm, yy] = d.map(Number); if (yy < 100) yy += 2000; if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) out.doc_date = `${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
+  const tot = all.match(/סה"?כ[^\n\d]{0,6}לפני[^\n\d]{0,10}([\d,]+\.\d{2})/) || all.match(/לפני מע"?מ[^\n\d]{0,4}([\d,]+\.\d{2})/);
+  if (tot) out.net = toNum(tot[1]);
+  const COLS = /מק"?ט|ברקוד|תיאור|כמות|מחיר|סכום|פריט/;
+  const headEnd = lines.findIndex(l => COLS.test(l) || splitLine(l)); const headLines = lines.slice(0, headEnd > 0 ? Math.min(headEnd, 8) : 6);
+  if (!out.hp){ const h9 = headLines.join(' ').match(/(?:^|[^\d-])(\d{9})(?![\d-])/); if (h9) out.hp = h9[1]; }
+  out.top = headLines.map(l => l.split(/תעודת|תאריך|חשבונית|הזמנה מס|מסמך/)[0]).filter(l => HEB.test(l) && !/רח['׳]|טל['׳]|לכבוד|ח\.?\s?פ/.test(l))
+    .map(l => l.replace(/[^֐-׿"' ]/g,' ').replace(/\s+/g,' ').replace(/(^| )[א-ת](?= |$)/g,' ').trim()).filter(l => heb(l).length >= 4);
+  return out;
+}
+/* which known supplier is this? by company number first, then by name in the header */
+function detectSupplier(head, sups){
+  if (head.hp){ const s = sups.find(s => s.hp === head.hp || s.template?.hp === head.hp); if (s) return s; }
+  let best = null, score = 0;
+  for (const s of sups) for (const ref of [s.name, ...(s.template?.heads || [])]) for (const t of head.top || []){ const v = charSim(ref, t); if (v > score){ score = v; best = s; } }
+  return score >= 0.72 ? best : null;
+}
+/* one line of the document -> {name, code, nums} or null */
+function splitLine(raw){
+  const l = ocrNorm(raw); if (!l || SKIP_LINE.test(l)) return null;
+  let toks = l.split(' ').filter(Boolean);
+  const code = toks.find(isCode) || null;
+  if (code) toks = toks.filter(t => t !== code);
+  /* the numbers at the end of the line are the columns (qty, price, total). A unit column ("יח'") between the name and them is dropped,
+     but "15 ק"ג" belongs to the product name: a unit right after a number stops the scan */
+  const nums = [];
+  while (toks.length){
+    const t = toks[toks.length-1], n = toNum(t);
+    if (n !== null){ nums.unshift(n); toks.pop(); continue; }
+    if (!nums.length && t.length <= 1 && !HEB.test(t)){ toks.pop(); continue; }
+    if ((UNIT.test(t) || (t.length <= 1 && !HEB.test(t))) && nums.length && !(toks.length > 1 && toNum(toks[toks.length-2]) !== null)){ toks.pop(); continue; }
+    break;
+  }
+  // a number glued to the name ("15 ק"ג" was not stopped because no unit followed): keep the last 3-4 as columns
+  while (nums.length > 4){ toks.push(String(nums.shift())); }
+  // leading junk (stray letters from table borders) before the code / name
+  while (toks.length && toks[0].length <= 1 && !HEB.test(toks[0])) toks.shift();
+  const name = toks.join(' ').replace(/\s+/g,' ').trim();
+  const hebLetters = (name.match(/[א-ת]/g) || []).length;
+  if (!nums.length || (hebLetters < 2 && !code)) return null;
+  return {name, code, nums};
+}
+/* qty / price out of the numbers on the line: learned position first, then "qty × price = total" */
+function pickQty(nums, layout){
+  if (layout && nums.length === layout.n){ return {qty:nums[layout.qty], price: layout.price != null ? nums[layout.price] : null, how:'template'}; }
+  for (let i = 0; i < nums.length; i++) for (let j = 0; j < nums.length; j++) for (let k = 0; k < nums.length; k++){
+    if (i === j || j === k || i === k) continue;
+    const q = nums[i], p = nums[j], t = nums[k];
+    if (q > 0 && q < 10000 && Number.isInteger(q) && p > 0 && close(q * p, t) && k > Math.min(i, j)) return {qty:q, price:p, how:'math', layout:{n:nums.length, qty:i, price:j, total:k}};
+  }
+  const q = nums.find(n => Number.isInteger(n) && n > 0 && n < 1000);
+  return q ? {qty:q, price:null, how:'guess'} : null;
+}
+function parseDocText(text, sups = []){
+  const lines = String(text||'').split(/\r?\n/).map(ocrNorm).filter(Boolean);
+  const head = docHeader(lines), sup = detectSupplier(head, sups), tpl = sup?.template || {};
+  const items = [], layouts = {};
+  for (const raw of lines){
+    const s = splitLine(raw); if (!s) continue;
+    const r = pickQty(s.nums, tpl.layout); if (!r) continue;
+    if (r.layout){ const k = JSON.stringify(r.layout); layouts[k] = (layouts[k]||0) + 1; }
+    let name = s.name, fixed = false;
+    const known = (s.code && tpl.items?.[s.code]) || (tpl.names || []).map(n => [n, charSim(n, name)]).filter(x => x[1] >= 0.8).sort((a,b) => b[1]-a[1])[0]?.[0];
+    if (known && known !== name){ name = known; fixed = true; }
+    if (!name || name.length < 2) name = s.code ? 'מוצר ' + s.code : '';
+    if (!name) continue;
+    items.push({name:name.slice(0,200), code:s.code, qty:r.qty, unit_price:r.price, how:r.how, fixed, nums:s.nums});
+  }
+  const sum = items.reduce((a, i) => a + (i.unit_price != null ? i.qty * i.unit_price : 0), 0);
+  const priced = items.length && items.every(i => i.unit_price != null);
+  const check = head.net && priced ? (close(sum, head.net) ? 'match' : 'mismatch') : 'unknown';
+  const layout = Object.entries(layouts).sort((a,b) => b[1]-a[1])[0]?.[0];
+  return {supplier: sup ? sup.name : (head.top?.[0] || null), supplier_id: sup?.id || null, hp: head.hp || null, doc_no: head.doc_no || null, doc_date: head.doc_date || null,
+          top: head.top || [], items, net: head.net || null, sum: Math.round(sum*100)/100, check, learnedFrom: sup ? (tpl.docs || 0) : 0, layout: layout ? JSON.parse(layout) : (tpl.layout || null)};
+}
+/* after the list was checked and approved: remember this supplier's template */
+function learnTemplate(oldTpl = {}, parsed, approvedItems, hp){
+  const heads = [...new Set([...(oldTpl.heads||[]), ...((parsed?.top)||[]).slice(0,2)])].slice(-8);
+  const t = {hp: hp || oldTpl.hp || null, heads, docs:(oldTpl.docs||0) + 1, layout: parsed?.layout || oldTpl.layout || null, items:{...(oldTpl.items||{})}, names:[...(oldTpl.names||[])]};
+  for (const i of approvedItems){
+    if (i.code) t.items[i.code] = i.name;
+    if (!t.names.includes(i.name)) t.names.push(i.name);
+  }
+  t.names = t.names.slice(-500);
+  const codes = Object.keys(t.items); if (codes.length > 1000) codes.slice(0, codes.length - 1000).forEach(c => delete t.items[c]);
+  return t;
+}
+
+/* ---- free reading on the device (no AI): clean the photo, OCR it, then read it with the supplier's learned template ---- */
+const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
+let tessWorker = null, tessLoading = null;
+async function ocrWorker(onStep){
+  if (tessWorker) return tessWorker;
+  if (!tessLoading) tessLoading = (async () => {
+    await loadScript(TESS, () => window.Tesseract);
+    onStep && onStep('טוען את מנוע הקריאה (רק בפעם הראשונה, כ-7MB)…');
+    tessWorker = await Tesseract.createWorker(['heb','eng'], 1);
+    return tessWorker;
+  })().catch(e => { tessLoading = null; throw e; });
+  return tessLoading;
+}
+/* phone photo -> big, black-on-white, table lines removed (that is what makes free OCR read tables well) */
+function prepForOcr(src){
+  const k = Math.min(3, Math.max(1, 2000 / Math.max(1, src.width)));
+  const W = Math.round(src.width * k), H = Math.round(src.height * k);
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', {willReadFrequently:true}); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(src, 0, 0, W, H);
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, g = new Uint8Array(W*H);
+  for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j]*299 + d[j+1]*587 + d[j+2]*114) / 1000;
+  const S = new Float64Array((W+1)*(H+1));                         // integral image -> local average (adaptive threshold)
+  for (let y = 1; y <= H; y++){ let row = 0; for (let x = 1; x <= W; x++){ row += g[(y-1)*W + x-1]; S[y*(W+1)+x] = S[(y-1)*(W+1)+x] + row; } }
+  const r = Math.max(10, Math.round(W / 100)), ink = new Uint8Array(W*H);
+  for (let y = 0; y < H; y++){ const y0 = Math.max(0, y-r), y1 = Math.min(H, y+r+1);
+    for (let x = 0; x < W; x++){ const x0 = Math.max(0, x-r), x1 = Math.min(W, x+r+1);
+      const sum = S[y1*(W+1)+x1] - S[y0*(W+1)+x1] - S[y1*(W+1)+x0] + S[y0*(W+1)+x0];
+      ink[y*W+x] = g[y*W+x] < sum / ((y1-y0)*(x1-x0)) - 15 ? 1 : 0; } }
+  const line = new Uint8Array(W*H), L = Math.max(60, Math.round(W / 25));   // long straight runs = table borders, not letters
+  for (let y = 0; y < H; y++){ let s = -1; for (let x = 0; x <= W; x++){ const on = x < W && ink[y*W+x]; if (on && s < 0) s = x; if (!on && s >= 0){ if (x - s >= L) for (let t = s; t < x; t++) line[y*W+t] = 1; s = -1; } } }
+  for (let x = 0; x < W; x++){ let s = -1; for (let y = 0; y <= H; y++){ const on = y < H && ink[y*W+x]; if (on && s < 0) s = y; if (!on && s >= 0){ if (y - s >= L) for (let t = s; t < y; t++) line[t*W+x] = 1; s = -1; } } }
+  for (let i = 0, j = 0; i < ink.length; i++, j += 4){
+    let near = line[i]; if (!near){ const x = i % W, y = (i - x) / W;
+      for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2 && !near; dx++){ const xx = x+dx, yy = y+dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && line[yy*W+xx]) near = 1; } }
+    const v = ink[i] && !near ? 0 : 255; d[j] = d[j+1] = d[j+2] = v; d[j+3] = 255; }
+  ctx.putImageData(img, 0, 0); return c;
+}
+function fileToCanvas(f){
+  return new Promise((ok, bad) => { const u = URL.createObjectURL(f), im = new Image();
+    im.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 2600 / Math.max(im.width, im.height)); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); ok(c); };
+    im.onerror = () => { URL.revokeObjectURL(u); bad(new Error('img')); }; im.src = u; });
+}
+async function pdfCanvases(f){
+  await loadScript(PDFJS, () => window.pdfjsLib);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.replace('pdf.min.js','pdf.worker.min.js');
+  const pdf = await pdfjsLib.getDocument({data: await f.arrayBuffer()}).promise, out = [];
+  for (let n = 1; n <= Math.min(pdf.numPages, 4); n++){
+    const page = await pdf.getPage(n), v = page.getViewport({scale:1}), sc = 2000 / Math.max(v.width, v.height);
+    const vp = page.getViewport({scale:sc}), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+    await page.render({canvasContext:cx, viewport:vp}).promise; out.push(c);
+  }
+  return out;
+}
+const canvasToJpeg = (c, max = 1600) => { const k = Math.min(1, max / Math.max(c.width, c.height)), t = document.createElement('canvas'); t.width = Math.round(c.width*k); t.height = Math.round(c.height*k);
+  t.getContext('2d').drawImage(c, 0, 0, t.width, t.height); return {type:'image/jpeg', data:t.toDataURL('image/jpeg', 0.82).split(',')[1]}; };
+async function ocrPages(canvases, onStep){
+  const w = await ocrWorker(onStep); let text = '';
+  for (let n = 0; n < canvases.length; n++){ onStep && onStep(canvases.length > 1 ? `קורא עמוד ${n+1} מתוך ${canvases.length}…` : 'קורא את המסמך…');
+    const r = await w.recognize(prepForOcr(canvases[n])); text += r.data.text + '\n'; }
+  return text;
+}
+
+async function rcvFiles(files, how){
+  files = files.filter(Boolean); if (!files.length || RCV.busy) return;
+  const msg = t => { const m = $('#rcvMsg'); if (m) m.innerHTML = t; };
+  const wait = t => msg(`<div class="rcv-wait"><span class="spin"></span><b>${t}</b></div>`);
+  RCV.busy = true;
+  try {
+    const xl = files.find(f => /\.(xlsx?|csv)$/i.test(f.name));
+    if (xl){ wait('קורא את הקובץ…'); const doc = rowsToDoc(await impReadRows(xl));
+      if (doc.unreadable){ msg('<div class="err">לא מצאתי עמודות של מוצר וכמות בקובץ.</div>'); return; }
+      return await rcvCreate(doc, 'excel', {how:'excel'}); }
+    wait('מכין את התמונה…');
+    const canv = [];
+    for (const f of files){
+      if (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) canv.push(...await pdfCanvases(f));
+      else if (/^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name)) canv.push(await fileToCanvas(f));
+    }
+    if (!canv.length){ msg('<div class="err">צריך תמונה, PDF או אקסל.</div>'); return; }
+    RCV.pages = canv.slice(0, 4);
+    let doc = null;
+    try { const text = await ocrPages(RCV.pages, wait); RCV.lastText = text; doc = parseDocText(text, RCV.sup); }
+    catch(e){ console.error(e); }
+    if (doc && doc.items.length) return await rcvCreate(doc, 'ocr', {how:'ocr', check:doc.check, sum:doc.sum, net:doc.net, layout:doc.layout, top:doc.top, hp:doc.hp, known:!!doc.supplier_id, learnedFrom:doc.learnedFrom, fixed:doc.items.filter(i => i.fixed).length});
+    msg(`<div class="err">לא הצלחתי לקרוא את השורות בחינם. אפשר לצלם שוב (חד, מלמעלה, באור טוב), או:</div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-act="raihome">קריאה עם AI (כמה אגורות)</button><button class="btn" data-act="rcvmanual">רשימה ידנית</button></div>`);
+  } catch(e){ console.error(e); msg('<div class="err">משהו השתבש. נסו שוב.</div>'); }
+  finally { RCV.busy = false; }
+}
+/* AI only when the free reading didn't work, and only when someone asks */
+async function rcvAI(){
+  if (!RCV.pages?.length){ toast('צריך לצלם שוב את התעודה'); return null; }
+  const {data, error} = await sb.functions.invoke('read-doc', {body:{pages:RCV.pages.map(c => canvasToJpeg(c))}});
+  if (error){ let detail = ''; try { detail = (await error.context?.json?.())?.error || ''; } catch(_){}
+    toast(detail==='daily limit' ? 'הגעתם למכסה היומית של קריאה עם AI.' : 'גם הקריאה עם AI לא הצליחה. נסו צילום חד יותר, או רשימה ידנית.'); return null; }
+  if (!data || data.unreadable || !data.items?.length){ toast('לא נמצאו שורות של מוצרים במסמך.'); return null; }
+  return data;
+}
+async function rcvSupplier(raw){
+  const name = String(raw||'').replace(/\s+/g,' ').trim().slice(0, 80), key = normName(name); if (!key) return null;
+  const hit = RCV.sup.find(s => normName(s.name) === key) || RCV.sup.find(s => key.includes(normName(s.name)) || normName(s.name).includes(key));
+  if (hit) return hit;
+  const {data, error} = await sb.from('suppliers').insert({store_id:S.store.id, name}).select().single();
+  if (error) return null;
+  RCV.sup.push(data); return data;
+}
+function matchProduct(supId, it){
+  if (it.code){ const p = S.products.find(p => p.barcode && p.barcode === it.code); if (p) return p.id; }
+  const a = supId && RCV.alias.find(a => a.supplier_id === supId && a.alias === normName(it.name)); if (a) return a.product_id;
+  return null;
+}
+async function rcvCreate(doc, source, info){
+  const sup = (doc.supplier_id && RCV.sup.find(s => s.id === doc.supplier_id)) || await rcvSupplier(doc.supplier);
+  const rec = {id:uid(), store_id:S.store.id, supplier_id:sup?.id || null, supplier_name:sup?.name || doc.supplier || null, doc_no:doc.doc_no || null, doc_date:doc.doc_date || null, source:source||'manual',
+    status: source === 'manual' ? 'open' : 'draft', read_info:info || null, created_at:new Date().toISOString()};
+  const {error} = await sb.from('receipts').insert(rec); if (error) throw error;
+  const items = (doc.items||[]).map((it, n) => ({id:uid(), store_id:S.store.id, receipt_id:rec.id, pos:n, name:it.name, code:it.code||null, qty_ordered:it.qty||0, qty_received:0, qty_damaged:0, unit_price:it.unit_price ?? null, product_id:matchProduct(rec.supplier_id, it), extra:false, _fixed:!!it.fixed}));
+  if (items.length){ const r = await sb.from('receipt_items').insert(items.map(({_fixed, ...x}) => x)); if (r.error){ await sb.from('receipts').delete().eq('id', rec.id); throw r.error; } }
+  rec._items = items; RCV.list.unshift(rec); RCV.cur = {...rec, items};
+  const linked = items.filter(i => i.product_id).length;
+  rcvRender(); if (items.length) toast(`נקלטו ${items.length} שורות${linked ? ', '+linked+' קושרו למוצרים לבד' : ''}.`);
+}
+
+/* ---- ticking ---- */
+const rcvSaveT = {};
+function rcvSaveItem(i){
+  clearTimeout(rcvSaveT[i.id]);
+  rcvSaveT[i.id] = setTimeout(async () => { const {_flash, _fixed, ...row} = i; const {error} = await sb.from('receipt_items').upsert(row); if (error){ console.error(error); toast('השמירה נכשלה, בדקו את האינטרנט'); } }, 300);
+  const li = RCV.list.find(x => x.id === i.receipt_id); if (li) li._items = RCV.cur.items;
+}
+function rcvBump(i, d){ i.qty_received = Math.max(0, (Number(i.qty_received)||0) + d); rcvSaveItem(i); }
+async function rcvField(inp){
+  const r = RCV.cur, f = inp.dataset.f;
+  if (f === 'product_id'){
+    const i = r.items.find(x => x.id === inp.dataset.id); i.product_id = inp.value || null; rcvSaveItem(i);
+    if (i.product_id && r.supplier_id && !i.extra){   // learn: next document from this supplier links by itself
+      const row = {id:uid(), store_id:S.store.id, supplier_id:r.supplier_id, alias:normName(i.name), product_id:i.product_id};
+      const ex = RCV.alias.find(a => a.supplier_id === r.supplier_id && a.alias === row.alias);
+      if (ex){ ex.product_id = i.product_id; await sb.from('supplier_aliases').update({product_id:i.product_id}).eq('id', ex.id); }
+      else { const {error} = await sb.from('supplier_aliases').insert(row); if (!error) RCV.alias.push(row); }
+    }
+    const p = S.products.find(p => p.id === i.product_id);
+    if (p && i.code && !p.barcode && !S.products.some(x => x.barcode === i.code)){ p.barcode = i.code; save(); toast('גם הברקוד נשמר למוצר, מעכשיו הסורק יזהה אותו'); }
+    rcvRender(); return;
+  }
+  let v = inp.value.trim();
+  const patch = {[f]: v || null};
+  if (f === 'supplier_name'){ const s = await rcvSupplier(v); patch.supplier_id = s?.id || null; patch.supplier_name = s?.name || v || null; }
+  Object.assign(r, patch); const li = RCV.list.find(x => x.id === r.id); if (li) Object.assign(li, patch);
+  const {error} = await sb.from('receipts').update(patch).eq('id', r.id); if (error) toast('השמירה נכשלה');
+}
+function rcvBeep(ok){ try { const a = new (window.AudioContext||window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = ok ? 880 : 300; g.gain.value = .08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + (ok ? .09 : .25)); } catch(e){} }
+function rcvScan(code){
+  const r = RCV.cur; if (!r || r.status !== 'open') return false;
+  const prodIds = S.products.filter(p => p.barcode === code).map(p => p.id);
+  let i = r.items.find(x => x.code === code && x.qty_received < x.qty_ordered) || r.items.find(x => x.product_id && prodIds.includes(x.product_id) && x.qty_received < x.qty_ordered)
+       || r.items.find(x => x.code === code) || r.items.find(x => x.product_id && prodIds.includes(x.product_id));
+  if (!i){   // arrived but is not on the document
+    const p = S.products.find(p => p.barcode === code);
+    i = {id:uid(), store_id:S.store.id, receipt_id:r.id, pos:r.items.length, name:p ? p.name+' '+p.kg+' ק"ג' : 'מוצר לא מזוהה', code, qty_ordered:0, qty_received:0, qty_damaged:0, unit_price:null, product_id:p?.id || null, extra:true};
+    r.items.push(i); rcvBeep(false); toast('המוצר הזה לא מופיע בתעודה. נוסף כ"לא הוזמן".');
+  } else rcvBeep(true);
+  rcvBump(i, 1); rcvRender();
+  const el = document.getElementById('rl-'+i.id); if (el){ el.scrollIntoView({block:'center', behavior:'smooth'}); el.classList.add('flash'); }
+  return true;
+}
+function rcvSummaryText(){
+  const r = RCV.cur, c = rcvCounts(r.items);
+  const lines = c.missing.map(i => `• ${i.name}: הוזמנו ${i.qty_ordered}, הגיעו ${i.qty_received}`);
+  const extra = r.items.filter(i => i.extra).map(i => `• ${i.name}${i.code ? ' ('+i.code+')' : ''}: ${i.qty_received}`);
+  return `שלום, כאן ${S.store.name}.\nבדקנו את המשלוח${r.doc_no ? ' לפי תעודה '+r.doc_no : ''}${r.doc_date ? ' מ-'+fmtD(r.doc_date) : ''}.\n`
+    + (lines.length ? `חסרים:\n${lines.join('\n')}\n` : 'הכל הגיע, תודה!\n')
+    + (extra.length ? `הגיעו ולא היו בתעודה:\n${extra.join('\n')}\n` : '')
+    + (lines.length ? 'נשמח שתשלימו או תזכו. תודה!' : '');
+}
+function rcvSummary(){
+  const r = RCV.cur, c = rcvCounts(r.items), sup = RCV.sup.find(s => s.id === r.supplier_id);
+  modal(`<span class="eyebrow">סיכום קבלה</span><h2 id="mTitle">${c.missing.length ? 'חסרות '+c.missing.length+' שורות' : 'הכל הגיע'}</h2>
+    <div class="field"><label for="sMsg">ההודעה לספק</label><textarea id="sMsg" rows="9">${esc(rcvSummaryText())}</textarea></div>
+    <div class="field"><label for="sPhone">וואטסאפ של הספק</label><input id="sPhone" inputmode="tel" class="num" value="${esc(sup?.phone||'')}" placeholder="05X-XXXXXXX"></div>
+    <div class="row"><button class="btn wa" data-act="rsend">פתח בוואטסאפ</button><button class="btn" data-act="rcopy">העתקה</button><button class="btn" data-act="close">סגירה</button></div>`);
+}
+async function rcvAct(a, t){
+  const r = RCV.cur, i = r && t.dataset.id ? r.items.find(x => x.id === t.dataset.id) : null;
+  if (a==='rcvopen') return rcvOpen(t.dataset.id);
+  if (a==='rcvback'){ RCV.cur = null; return rcvRender(); }
+  if (a==='rcvmanual') return rcvCreate({items:[]}, 'manual');
+  if (a==='raihome' || a==='rai'){
+    if (RCV.busy) return; RCV.busy = true; const prevMsg = $('#rcvMsg'); if (prevMsg) prevMsg.innerHTML = '<div class="rcv-wait"><span class="spin"></span><b>קורא עם AI…</b></div>';
+    try { const doc = await rcvAI(); if (!doc) return;
+      if (a==='rai' && r){ await sb.from('receipt_items').delete().eq('receipt_id', r.id); await sb.from('receipts').delete().eq('id', r.id); RCV.list = RCV.list.filter(x => x.id !== r.id); RCV.cur = null; }
+      const o = RCV.lastText ? parseDocText(RCV.lastText, RCV.sup) : null;
+      await rcvCreate(doc, 'ai', {how:'ai', layout:o?.layout || null, top:o?.top || [], hp:o?.hp || null});
+    } finally { RCV.busy = false; } return; }
+  if (a==='rdel' && i && r.status === 'draft'){ const {error} = await sb.from('receipt_items').delete().eq('id', i.id); if (error){ toast('לא נמחק'); return; } r.items = r.items.filter(x => x.id !== i.id); return rcvRender(); }
+  if (a==='rcancel' && r && r.status === 'draft'){ await sb.from('receipts').delete().eq('id', r.id); RCV.list = RCV.list.filter(x => x.id !== r.id); RCV.cur = null; toast('הקבלה בוטלה'); return rcvRender(); }
+  if (a==='rok' && r && r.status === 'draft'){
+    if (!r.items.length){ toast('אין שורות לאשר'); return; }
+    await new Promise(ok => setTimeout(ok, 350));            // let the last edit save first
+    const {error} = await sb.from('receipts').update({status:'open'}).eq('id', r.id); if (error){ toast('השמירה נכשלה'); return; }
+    r.status = 'open'; const li = RCV.list.find(x => x.id === r.id); if (li){ li.status = 'open'; li._items = r.items; }
+    let learned = '';
+    const sup = r.supplier_id && RCV.sup.find(x => x.id === r.supplier_id);
+    if (sup){   // the self-learning: remember how this supplier's documents look, so next time no AI is needed
+      const ri = r.read_info || {};
+      const tpl = learnTemplate(sup.template || {}, {layout:ri.layout, top:ri.top}, r.items.filter(x => !x.extra), ri.hp || sup.hp);
+      sup.template = tpl; if (ri.hp && !sup.hp) sup.hp = ri.hp;
+      await sb.from('suppliers').update({template:tpl, hp:sup.hp || null}).eq('id', sup.id);
+      learned = ` · למדתי את התבנית של ${sup.name} (${tpl.docs} תעודות)`;
+    }
+    rcvRender(); toast('הרשימה ננעלה. עכשיו מסמנים ✓ מה הגיע' + learned); return; }
+  if (a==='rq' && i){ rcvBump(i, Number(t.dataset.d)); return rcvRender(); }
+  if ((a==='rall' || a==='rtick') && i){ i.qty_received = (i.qty_received >= i.qty_ordered && i.qty_ordered > 0) ? 0 : i.qty_ordered; rcvSaveItem(i); return rcvRender(); }
+  if (a==='radd'){
+    modal(`<span class="eyebrow">שורה חדשה</span><h2 id="mTitle">מה אמור להגיע?</h2>
+      <div class="field"><label for="aProd">מוצר מהחנות</label><select id="aProd"><option value="">— אחר —</option>${S.products.map(p => `<option value="${p.id}">${esc(p.name)} ${p.kg} ק"ג</option>`).join('')}</select></div>
+      <div class="field"><label for="aName">או שם חופשי</label><input id="aName"></div>
+      <div class="field"><label for="aQty">כמה הוזמנו</label><input id="aQty" type="number" min="1" value="1" class="num"></div>
+      <div class="err" id="aErr"></div>
+      <div class="row"><button class="btn primary" data-act="raddok">הוספה</button><button class="btn" data-act="close">ביטול</button></div>`);
+    $('#aProd').onchange = e => { const p = S.products.find(x => x.id === e.target.value); if (p) $('#aName').value = p.name+' '+p.kg+' ק"ג'; };
+    return; }
+  if (a==='raddok'){
+    const name = $('#aName').value.trim(), q = Number($('#aQty').value) || 0, pid = $('#aProd').value || null;
+    if (!name){ $('#aErr').textContent = 'חסר שם מוצר'; return; }
+    const it = {id:uid(), store_id:S.store.id, receipt_id:r.id, pos:r.items.length, name:name.slice(0,200), code:S.products.find(p => p.id === pid)?.barcode || null, qty_ordered:q, qty_received:0, qty_damaged:0, unit_price:null, product_id:pid, extra:false};
+    r.items.push(it); rcvSaveItem(it); closeDrawer(); return rcvRender(); }
+  if (a==='rfinish'){ r.status = 'done'; r.closed_at = new Date().toISOString(); const li = RCV.list.find(x => x.id === r.id); if (li){ li.status = 'done'; li._items = r.items; }
+    await sb.from('receipts').update({status:'done', closed_at:r.closed_at}).eq('id', r.id); rcvRender(); return rcvSummary(); }
+  if (a==='rreopen'){ r.status = 'open'; const li = RCV.list.find(x => x.id === r.id); if (li) li.status = 'open'; await sb.from('receipts').update({status:'open', closed_at:null}).eq('id', r.id); return rcvRender(); }
+  if (a==='rsummary') return rcvSummary();
+  if (a==='rcopy'){ navigator.clipboard?.writeText($('#sMsg').value); return toast('הועתק'); }
+  if (a==='rsend'){
+    const ph = normPhone($('#sPhone').value), sup = RCV.sup.find(s => s.id === r.supplier_id);
+    if (sup && ph && ph !== normPhone(sup.phone)){ sup.phone = ph; await sb.from('suppliers').update({phone:ph}).eq('id', sup.id); }
+    window.open('https://wa.me/'+(ph ? intl(ph) : '')+'?text='+encodeURIComponent($('#sMsg').value), '_blank', 'noopener'); return;
+  }
+}
+
 /* router */
-const SHELL_VIEWS = ['today','sale','customers','report','setup'];
+const SHELL_VIEWS = ['today','sale','customers','receive','report','setup'];
 function route(){
   if (!S) return;
   const h = (location.hash||'#today').slice(1);
@@ -1545,10 +2424,15 @@ function route(){
     const i=$('#saleSearch'); i.addEventListener('input', ()=>saleResults(i.value)); saleResults(''); i.focus();
     i.addEventListener('keydown', e => { if (e.key==='Enter'){ const d = normPhone(i.value); if (d.length>=8 && !d.startsWith('05')){ e.preventDefault(); i.value=''; saleResults(''); handleScan(d); } } });
   }
+  if (v==='receive') rcvRender();
   if (v==='customers'){
+    const vw = $('#view');
+    vw.ondragover = e => { if ([...(e.dataTransfer?.types||[])].includes('Files')){ e.preventDefault(); vw.classList.add('drop-on'); } };
+    vw.ondragleave = e => { if (e.target === vw) vw.classList.remove('drop-on'); };
+    vw.ondrop = e => { e.preventDefault(); vw.classList.remove('drop-on'); const f = e.dataTransfer.files[0]; if (!f) return; openImport(); impLoad(f); };
     $('#custFilter').addEventListener('input', e => {
       const q = e.target.value.trim(), nq = normPhone(q);
-      const rows = S.customers.filter(c => !q || c.name.includes(q) || (c.petName||'').includes(q) || (nq && normPhone(c.phone).includes(nq)))
+      const rows = S.customers.filter(c => !q || c.name.includes(q) || (c.petName||'').includes(q) || (c.city||'').includes(q) || (nq && (normPhone(c.phone).includes(nq) || c.extId===q)))
         .map(c=>({c,s:status(c)})).sort((a,b)=>a.s.left-b.s.left);
       $('#custList').innerHTML = rows.map(x=>custRow(x.c,'list')).join('') || '<div class="empty">לא נמצא</div>';
     });
@@ -1602,7 +2486,7 @@ setInterval(() => {
   const inShell = !(h==='#kiosk' || h.startsWith('#join') || h.startsWith('#reply'));
   const idle = (Date.now() - lastActive) / 1000;
   if (h.startsWith('#join') || h.startsWith('#reply')){ if (idle > 60 && h.startsWith('#join')) location.hash = '#kiosk'; return; }
-  if (!inShell || S.store.autoKiosk === false || trimBusy) { $('#idleBar')?.remove(); return; }
+  if (!inShell || S.store.autoKiosk === false || trimBusy || h==='#receive') { $('#idleBar')?.remove(); return; }
   if (idle >= 20){ $('#idleBar')?.remove(); closeDrawer(); location.hash = '#kiosk'; return; }
   if (idle >= 14 && !$('#idleBar')){
     const b = document.createElement('div'); b.className = 'idle-bar'; b.id = 'idleBar'; b.setAttribute('role','status');
@@ -1709,6 +2593,7 @@ async function boot(){
     if (error) throw error;
     if (!store) return renderOnboarding();
     await loadAll(store);
+    watchInit();
     if (!location.hash) location.hash = S.store.autoKiosk ? '#kiosk' : '#today';
     route();
   } catch(e){

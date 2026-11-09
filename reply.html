@@ -33,13 +33,15 @@ function page(){
   const pet = info.pet_name || PETS[info.pet]?.the || '';
   $('#root').innerHTML = `
     <div class="join-head"><span class="eyebrow" style="color:#e2c27f">הודעה מ${esc(info.store)}</span><h1>היי ${esc(info.first_name)}</h1>
-      <p>${info.product ? `${esc(info.product)} ${esc(info.kg)} ק"ג${pet ? ' ל'+esc(pet.replace(/^ה/,'')) : ''}` : ''}</p></div>
+      <p>${info.optin ? 'רוצה שנזכיר לך בוואטסאפ כמה ימים לפני שהאוכל נגמר? בחרו תשובה:' : info.product ? `${esc(info.product)} ${esc(info.kg)} ק"ג${pet ? ' ל'+esc(pet.replace(/^ה/,'')) : ''}` : ''}</p></div>
     <div class="panel" id="body"><div class="reply-btns">
       <button class="btn primary big" id="bYes">כן, אשמח ל${what}</button>
       <button class="btn big" id="bBought">קניתי כבר</button>
+      ${info.optin ? '<button class="btn big" id="bLater">עוד לא, אבל תזכירו לי בהמשך</button>' : ''}
       <button class="btn big ghost danger" id="bRemove">הסירו אותי מהתזכורות</button>
     </div></div>`;
   $('#bYes').onclick = async () => { if (await act('yes')) done(`<h2>מעולה!</h2><p class="sub">${esc(info.store)} קיבלו את הבקשה ויחזרו אליך לתיאום איסוף או משלוח.</p>`); };
+  if ($('#bLater')) $('#bLater').onclick = async () => { if (await act('optin')) done(`<h2>סגרנו!</h2><p class="sub">מעכשיו ${esc(info.store)} ישלחו לך תזכורת בוואטסאפ כמה ימים לפני שהאוכל נגמר.</p>`); };
   $('#bBought').onclick = () => {
     done(`<h2>תודה! מתי קנית?</h2><p class="sub">ככה נדע מתי להזכיר לך בפעם הבאה.</p><div class="reply-btns">${[[0,'היום'],[3,'לפני כמה ימים'],[7,'לפני שבוע'],[14,'לפני שבועיים'],[30,'לפני חודש או יותר']].map(([d,l]) => `<button class="btn" data-d="${d}">${l}</button>`).join('')}</div>`);
     document.querySelectorAll('[data-d]').forEach(b => b.onclick = async () => { if (await act('bought', Number(b.dataset.d))) done('<h2>עודכן</h2><p class="sub">נזכיר לך שוב כשהשק הבא יתקרב לסוף.</p>'); });
