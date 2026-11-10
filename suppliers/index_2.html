@@ -1083,6 +1083,7 @@ Rules:
 - A tiny adjustment that only rounds the final total to whole shekels (agorot, e.g. 0.24) is NOT a discount: use docDiscount type "none". Do not list it in doubts.
 - templateNotes: 3-6 short lines in Hebrew describing this supplier's layout for next time: which column holds the barcode, how bonus/free goods appear, how discounts appear, whether prices include VAT, pack units.
 - doubts: Hebrew notes ONLY about values that may be wrong and that the store owner should check by eye (blurry or unreadable digits, a line total that does not match qty × price, a page that seems missing). Do NOT explain readings you are confident about (which column you used, that bonus lines are free goods, which price includes VAT). A price "including VAT" that equals the price × 1.18, a line without a discount, and a few agorot of rounding in the totals are all normal: never list them. Empty array if nothing is doubtful.
+- The photos may be overlapping parts of one long receipt, top to bottom. A line that appears at the end of one photo and again at the start of the next is ONE line: list it once.
 - Use plain numbers. Never invent lines. If a value is unreadable use null and mention it in doubts.${tpl}${pdfText ? "\nText layer extracted from the PDF (Hebrew may appear reversed; prefer the images when they disagree):\n" + pdfText.slice(0, 14000) : ""}`;
 }
 
@@ -1116,6 +1117,28 @@ function findSupplier(res) {
   for (const s of Object.values(S.suppliers)) if (nm && (norm(s.name) === nm || norm(s.name).includes(nm) || nm.includes(norm(s.name)))) return s.id;
   return "";
 }
+/* photos of a very long receipt, shot in overlapping parts: the lines in the overlap are read twice. Merge them, unless the printed total says the repeated lines are real */
+function lineKey(l) { return [l.barcode || l.supplierCode || String(l.name || "").replace(/\s+/g, " ").trim(), n(l.qty), n(l.unitPrice), l.lineTotal ?? ""].join("|"); }
+function dedupOverlap(lines, doc, pricesIncVat) {
+  const sumOf = ls => ls.reduce((a, l) => a + (l.lineTotal != null && l.lineTotal !== "" ? n(l.lineTotal) : n(l.qty) * n(l.unitPrice) * (1 - n(l.lineDiscountPct) / 100)), 0);
+  const matchesPrinted = ls => { const s = sumOf(ls); const ex = doc.printedExVat, tot = doc.printedTotal; const tol = v => Math.max(1, v * 0.012);
+    return (ex && Math.abs(s - ex) <= tol(ex)) || (tot && Math.abs((pricesIncVat ? s : s * vatF()) - tot) <= tol(tot)); };
+  const keys = lines.map(lineKey), drop = new Set(), notes = [];
+  for (let i = 0; i < lines.length;) {
+    let done = false;
+    for (let k = Math.min(8, Math.floor((lines.length - i) / 2)); k >= 1 && !done; k--) {
+      let same = true; for (let j = 0; j < k; j++) if (keys[i + j] !== keys[i + k + j]) { same = false; break; }
+      if (!same) continue;
+      for (let j = 0; j < k; j++) drop.add(i + k + j);
+      notes.push(lines.slice(i, i + k).map(l => l.name || l.barcode).join(", ")); i += 2 * k; done = true;
+    }
+    if (!done) i++;
+  }
+  if (!drop.size) return { lines, notes: [] };
+  const kept = lines.filter((_, i) => !drop.has(i));
+  if ((doc.printedExVat || doc.printedTotal) && matchesPrinted(lines) && !matchesPrinted(kept)) return { lines, notes: [], skipped: true };
+  return { lines: kept, notes };
+}
 function startReview(res, source) {
   const supId = findSupplier(res || {});
   const lines = (res?.lines || []).map(l => {
@@ -1126,6 +1149,10 @@ function startReview(res, source) {
     return line;
   });
   const fixes = [];
+  if ((draft.files || []).length > 1 && source !== "manual" && lines.length > 1) {
+    const dd = dedupOverlap(lines, { printedTotal: nn(res?.totalWithVat), printedExVat: nn(res?.totalBeforeVat) }, !!res?.pricesIncludeVat);
+    if (dd.notes.length) { lines.splice(0, lines.length, ...dd.lines); fixes.push(`אוחדו ${dd.notes.length} כפילויות מחפיפה בין הצילומים: ${dd.notes.join(" | ")}. אם השורה הופיעה באמת פעמיים במסמך, הוסף אותה בחזרה.`); }
+  }
   for (const l of lines) if (weightLike(l.name, l.packSize)) { fixes.push(`"${l.name}": ${l.packSize} הוא משקל או נפח ולא כמות יחידות באריזה, ולכן יח' באריזה נשאר 1.`); l.packSize = 1; }
   // price already after discount + discount percent = discount counted twice
   for (const l of lines) {
