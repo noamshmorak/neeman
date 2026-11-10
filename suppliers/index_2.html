@@ -319,7 +319,17 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
   const sample={
     limits:async()=>({maxPromptBytes:262144,images:{maxCount:10,maxInputBytes:20e6,mediaTypes:["image/jpeg","image/png","image/webp"]}}),
     json:async(prompt,opts={})=>{
-      const key=getKey(); if(!key) throw {code:"no_key",message:"no key"};
+      const key=getKey();
+      if(!key){
+        if(!(sync.sb&&sync.sid)) throw {code:"no_key",message:"no key"};
+        /* no key on this device (a worker, or a new device): read through the server */
+        const imgs=[]; for(const im of (opts.images||[])) imgs.push(await toB64(im));
+        let res; try{ res=await sync.sb.functions.invoke("read-invoice",{body:{prompt:prompt+"\n\nReply with the JSON only.",images:imgs}}); }catch(e){ throw {code:"network",message:String(e)}; }
+        if(res.error){ let j=null; try{ j=await res.error.context.json(); }catch(e){} const m=(j&&j.error)||res.error.message||"";
+          throw {code:/daily limit/.test(m)?"daily_limit":/ANTHROPIC_API_KEY/.test(m)?"server_nokey":/not signed in|no store/.test(m)?"no_key":(j&&j.status===429)?"rate_limited":"upstream_error",message:m}; }
+        if(opts.signal&&opts.signal.aborted) throw {code:"cancelled",message:"cancelled"};
+        return parseJson(res.data&&res.data.text||"");
+      }
       const content=[]; for(const im of (opts.images||[])) content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:await toB64(im)}});
       content.push({type:"text",text:prompt+"\n\nReply with the JSON only."});
       let r;
@@ -891,8 +901,70 @@ const FREE = (() => {
     ctx.putImageData(img, 0, 0); return c;
   }
   async function blobToCanvas(blob) { const b = await createImageBitmap(blob); const k = Math.min(1, 2600 / Math.max(b.width, b.height)); const c = document.createElement("canvas"); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); c.getContext("2d").drawImage(b, 0, 0, c.width, c.height); return c; }
+  /* ---- straighten the photo before reading: sideways pages and a tilted page ---- */
+  function inkGrid(c, maxSide = 640) {
+    const k = Math.min(1, maxSide / Math.max(c.width, c.height)), w = Math.max(8, Math.round(c.width * k)), h = Math.max(8, Math.round(c.height * k));
+    const t = document.createElement("canvas"); t.width = w; t.height = h; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, w, h);
+    const d = x.getImageData(0, 0, w, h).data, g = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    const S = new Float64Array((w + 1) * (h + 1));
+    for (let y = 1; y <= h; y++) { let row = 0; for (let xx = 1; xx <= w; xx++) { row += g[(y - 1) * w + xx - 1]; S[y * (w + 1) + xx] = S[(y - 1) * (w + 1) + xx] + row; } }
+    const r = Math.max(4, Math.round(w / 60)), ink = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) { const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+      for (let xx = 0; xx < w; xx++) { const x0 = Math.max(0, xx - r), x1 = Math.min(w, xx + r + 1);
+        const m = (S[y1 * (w + 1) + x1] - S[y0 * (w + 1) + x1] - S[y1 * (w + 1) + x0] + S[y0 * (w + 1) + x0]) / ((y1 - y0) * (x1 - x0));
+        ink[y * w + xx] = g[y * w + xx] < m - 18 ? 1 : 0; } }
+    // drop long straight strokes (table borders, paper edges): only text should vote
+    const L = Math.round(Math.max(w, h) / 9), drop = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) { let s = -1; for (let xx = 0; xx <= w; xx++) { const on = xx < w && ink[y * w + xx]; if (on && s < 0) s = xx; if (!on && s >= 0) { if (xx - s >= L) for (let t2 = s; t2 < xx; t2++) drop[y * w + t2] = 1; s = -1; } } }
+    for (let xx = 0; xx < w; xx++) { let s = -1; for (let y = 0; y <= h; y++) { const on = y < h && ink[y * w + xx]; if (on && s < 0) s = y; if (!on && s >= 0) { if (y - s >= L) for (let t2 = s; t2 < y; t2++) drop[t2 * w + xx] = 1; s = -1; } } }
+    const pts = []; for (let i = 0; i < w * h; i++) if (ink[i] && !drop[i]) pts.push(i % w, (i / w) | 0);
+    return { w, h, pts };
+  }
+  /* how "line-like" the ink is when the page is turned by deg: sharp row peaks = text lines are horizontal */
+  function lineScore(G, deg, swap) {
+    const a = deg * Math.PI / 180, s = Math.sin(a), co = Math.cos(a), n = G.w + G.h, bins = new Float64Array(n * 2 + 2), cx = G.w / 2, cy = G.h / 2;
+    for (let i = 0; i < G.pts.length; i += 2) { let x = G.pts[i] - cx, y = G.pts[i + 1] - cy; if (swap) { const t = x; x = y; y = t; } const yy = -x * s + y * co; bins[Math.round(yy + n)]++; }
+    let sum = 0; for (let i = 0; i < bins.length; i++) sum += bins[i] * bins[i]; return sum;
+  }
+  function findTilt(G, swap) {
+    let best = 0, bs = -1; for (let a = -20; a <= 20; a += 1) { const v = lineScore(G, a, swap); if (v > bs) { bs = v; best = a; } }
+    const c0 = best; for (let a = c0 - 1; a <= c0 + 1; a += 0.25) { const v = lineScore(G, a, swap); if (v > bs) { bs = v; best = a; } }
+    return { deg: best, score: bs };
+  }
+  function turn(c, quarter, tilt) {
+    // quarter: 0..3 clockwise quarter turns, then a small tilt correction in degrees
+    const sw = quarter % 2 === 1, w1 = sw ? c.height : c.width, h1 = sw ? c.width : c.height;
+    const a = (tilt || 0) * Math.PI / 180, W = Math.ceil(Math.abs(w1 * Math.cos(a)) + Math.abs(h1 * Math.sin(a))), H = Math.ceil(Math.abs(w1 * Math.sin(a)) + Math.abs(h1 * Math.cos(a)));
+    const o = document.createElement("canvas"); o.width = W; o.height = H; const x = o.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+    x.translate(W / 2, H / 2); x.rotate(a + quarter * Math.PI / 2); x.drawImage(c, -c.width / 2, -c.height / 2); return o;
+  }
+  /* readable-ness of a quick low-res read: Hebrew/digit characters in confident words */
+  async function readScore(w, c) {
+    const k = Math.min(1, 1500 / Math.max(c.width, c.height)), t = document.createElement("canvas"); t.width = Math.round(c.width * k); t.height = Math.round(c.height * k); t.getContext("2d").drawImage(c, 0, 0, t.width, t.height);
+    const r = await w.recognize(prep(t)); let s = 0; for (const wd of String(r.data.text || "").split(/\s+/)) { if (/^[א-ת]{3,}$/.test(wd)) s += wd.length; else if (/^\d{5,}$/.test(wd)) s += wd.length; } return s;
+  }
+  async function straighten(c, w) {
+    const G = inkGrid(c); if (G.pts.length < 400) return { canvas: c, q: 0, tilt: 0 };
+    const up = findTilt(G, false), side = findTilt(G, true);
+    let q = 0, tilt = up.deg;
+    if (side.score > up.score * 1.12) {
+      // lines may run the other way: a quarter turn. Never trust the shape alone, a real read must prove it (long receipts look "sideways" too)
+      const s0 = await readScore(w, c), c1 = turn(c, 1, 0), c3 = turn(c, 3, 0), s1 = await readScore(w, c1), s3 = await readScore(w, c3);
+      window.NSC = [s0, s1, s3];
+      if (Math.max(s1, s3) > s0 * 1.3 + 15) { q = s1 >= s3 ? 1 : 3; const base = turn(c, q, 0), t2 = findTilt(inkGrid(base), false); tilt = t2.deg; }
+    }
+    if (q === 0) {
+      // upright axis: upside down is the only other possibility. Only check when a quick read of the page looks poor
+      const base = tilt ? turn(c, 0, -tilt) : c, s0 = await readScore(w, base);
+      if (s0 < 80) { const flip = turn(base, 2, 0), s2 = await readScore(w, flip); if (s2 > s0 * 1.6 + 20) { q = 2; tilt = 0; return { canvas: flip, q, tilt }; } }
+    }
+    if (Math.abs(tilt) < 1) tilt = 0;
+    // upside down? compare with a half turn when the page is upright and the read looks poor
+    return { canvas: q || tilt ? turn(c, q, -tilt) : c, q, tilt };
+  }
   async function ocr(blobs, step) { const w = await getWorker(step); let text = "";
-    for (let i = 0; i < blobs.length; i++) { step && step(blobs.length > 1 ? `קורא בחינם עמוד ${i + 1} מתוך ${blobs.length}…` : "קורא את המסמך בחינם, בטלפון…"); const r = await w.recognize(prep(await blobToCanvas(blobs[i]))); text += r.data.text + "\n"; }
+    for (let i = 0; i < blobs.length; i++) { step && step(blobs.length > 1 ? `קורא בחינם עמוד ${i + 1} מתוך ${blobs.length}…` : "קורא את המסמך בחינם, בטלפון…"); let cv = await blobToCanvas(blobs[i]); try { const st = await straighten(cv, w); cv = st.canvas; window.NORIENT_LAST = { q: st.q, tilt: st.tilt }; } catch (e) { console.error(e); } const r = await w.recognize(prep(cv)); text += r.data.text + "\n"; }
     return text; }
 
   /* ---- reading the text ---- */
@@ -1055,7 +1127,7 @@ async function readDoc() {
   } catch (e) {
     draft.busy = false;
     const code = e?.code;
-    draft.err = code === "cancelled" ? "" : code === "no_key" ? "כדי לקרוא צילומים ו-PDF צריך להזין מפתח API בלשונית הגדרות. אקסל והקלדה ידנית עובדים גם בלי." : code === "bad_key" ? "מפתח ה-API לא תקין. בדוק אותו בלשונית הגדרות." : code === "bad_model" ? "שם המודל בהגדרות לא מוכר. עדכן אותו בלשונית הגדרות." : code === "network" ? "אין חיבור לאינטרנט." : code === "not_granted" ? "לא אושרה גישה ל-Claude לדף הזה." : code === "rate_limited" ? "יותר מדי בקשות כרגע. נסה שוב בעוד כמה דקות." : code === "invalid_json" ? "Claude לא החזיר טבלה תקינה. נסה שוב או צלם את החשבונית ישר יותר ובאור טוב." : code === "image_rejected" ? "אחת התמונות לא התקבלה (סוג או גודל). נסה תמונה אחרת." : "הקריאה נכשלה (" + (code || e?.message || "שגיאה") + "). נסה שוב.";
+    draft.err = code === "cancelled" ? "" : code === "no_key" ? "כדי לקרוא צילומים ו-PDF צריך להזין מפתח API בלשונית הגדרות. אקסל והקלדה ידנית עובדים גם בלי." : code === "daily_limit" ? "הגעתם למכסת הקריאות היומית של החנות. אפשר להקליד ידנית או לנסות מחר." : code === "server_nokey" ? "הקריאה דרך השרת עוד לא הוגדרה (חסר מפתח בשרת). פנה לבעל החנות." : code === "bad_key" ? "מפתח ה-API לא תקין. בדוק אותו בלשונית הגדרות." : code === "bad_model" ? "שם המודל בהגדרות לא מוכר. עדכן אותו בלשונית הגדרות." : code === "network" ? "אין חיבור לאינטרנט." : code === "not_granted" ? "לא אושרה גישה ל-Claude לדף הזה." : code === "rate_limited" ? "יותר מדי בקשות כרגע. נסה שוב בעוד כמה דקות." : code === "invalid_json" ? "Claude לא החזיר טבלה תקינה. נסה שוב או צלם את החשבונית ישר יותר ובאור טוב." : code === "image_rejected" ? "אחת התמונות לא התקבלה (סוג או גודל). נסה תמונה אחרת." : "הקריאה נכשלה (" + (code || e?.message || "שגיאה") + "). נסה שוב.";
     render();
   }
 }
