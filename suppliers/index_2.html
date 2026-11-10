@@ -121,6 +121,16 @@ td.best{background:var(--good-soft);color:var(--good);font-weight:600}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 details summary{cursor:pointer;color:var(--accent);font-weight:500}
+.sc-top{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}.sc-top input{flex:1;min-width:150px}
+.sccard{border:1px solid var(--line,#ddd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.scbest{font-size:20px;font-weight:700}.qchips{display:flex;gap:6px;flex-wrap:wrap}
+.qchip{padding:8px 14px;border-radius:99px;border:1px solid var(--line,#ccc);background:transparent;font:inherit;cursor:pointer;min-width:44px}
+.qchip.on{background:var(--accent,#0f5c4a);color:#fff;border-color:var(--accent,#0f5c4a)}
+.scvideo{width:100%;max-height:60vh;background:#000;border-radius:10px}
+.scrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line,#eee)}
+.scstep{display:flex;gap:4px;align-items:center}.scstep button{width:34px;height:34px}.scstep b{min-width:28px;text-align:center}
+
+body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.worker #tabs a[data-v=quotes],body.worker #tabs a[data-v=compare],body.worker #tabs a[data-v=suppliers]{display:none}
 .syncchip{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line,#ddd);text-decoration:none;color:inherit;margin-inline-start:8px;white-space:nowrap}
 .syncchip.ok{color:#1b7a3a;border-color:#1b7a3a}.syncchip.warn{color:#b45309;border-color:#b45309}.syncchip.err{color:#b91c1c;border-color:#b91c1c}
 </style>
@@ -132,6 +142,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
       <div class="brand"><b>נאמן ספקים</b><span id="status">טוען…</span><a href="#setup" id="syncChip" class="syncchip" title="סנכרון לענן">☁ בודק…</a></div>
       <nav class="tabs" id="tabs">
         <a href="#inbox" data-v="inbox">קליטת חשבונית</a>
+        <a href="#scan" data-v="scan">סריקה והזמנה</a>
         <a href="#alerts" data-v="alerts">התראות<span class="badge" id="badge" hidden></span></a>
         <a href="#products" data-v="products">מוצרים</a>
         <a href="#quotes" data-v="quotes">הצעות מחיר</a>
@@ -167,11 +178,11 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
 
   /* ---------- cloud sync (Supabase): offline-first, last change wins per document ---------- */
   const CFG={url:"https://ruqrkmmiblgertdewutw.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1cXJrbW1pYmxnZXJ0ZGV3dXR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODYxMzIsImV4cCI6MjEwOTI2MjEzMn0.vhtxvsZWtD6w6wXt9hANSs6vLUn6KuWLBiPUNgslCyk"};
-  const QKEY="neeman-sup-queue", MKEY="neeman-sup-meta", LKEY="neeman-sup-last";
+  const SLUGKEY="neeman-sup-slug", QKEY="neeman-sup-queue", MKEY="neeman-sup-meta", LKEY="neeman-sup-last";
   const ld=(k,d)=>{ try{ const r=localStorage.getItem(k); return r?JSON.parse(r):d; }catch(e){ return d; } };
   const sv=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
   let queue=ld(QKEY,{}), meta=ld(MKEY,{}), lastPull=ld(LKEY,"");
-  const sync={sb:null,sid:null,email:"",storeName:"",state:"init",msg:"",busy:false,again:false,lastOk:0};
+  const sync={sb:null,sid:null,role:"",slug:"",workerName:"",email:"",storeName:"",state:"init",msg:"",busy:false,again:false,lastOk:0};
   const saveSync=()=>{ sv(QKEY,queue); sv(MKEY,meta); };
   const pending=()=>Object.keys(queue).length;
   function paint(){
@@ -217,7 +228,17 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
       const part=keys.slice(i,i+200).filter(p=>queue[p]);
       const sent={}; const rows=part.map(p=>{ sent[p]=queue[p].ts; return {store_id:sync.sid,path:p,data:queue[p].d,ts:queue[p].ts,deleted:queue[p].d===null}; });
       if(!rows.length) continue;
-      const {error}=await sync.sb.from("sup_docs").upsert(rows,{onConflict:"store_id,path"});
+      let {error}=await sync.sb.from("sup_docs").upsert(rows,{onConflict:"store_id,path"});
+      if(error && sync.role==="worker" && /row-level security|permission|policy/i.test(error.message||"")){
+        // the server refuses some of this worker's changes (a delete or a settings change): send one by one, drop only the refused ones
+        { const chk=await sync.sb.rpc("my_store"); if(!chk.error && !chk.data) throw new Error("החשבון הושבת. פנו לבעל החנות"); }
+        error=null; let refused=0;
+        for(const r of rows){ const one=await sync.sb.from("sup_docs").upsert([r],{onConflict:"store_id,path"});
+          if(one.error){ if(/row-level security|permission|policy/i.test(one.error.message||"")){ refused++; delete queue[r.path]; meta[r.path]=0; lastPull=""; } else { error=one.error; break; } }
+          else if(queue[r.path] && queue[r.path].ts===sent[r.path]) delete queue[r.path]; }
+        if(refused) sync.refused=(sync.refused||0)+refused;
+        saveSync();
+      }
       if(error) throw error;
       for(const p of part){ if(queue[p] && queue[p].ts===sent[p]) delete queue[p]; }
       saveSync();
@@ -241,10 +262,11 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
     try{
       const {data:{session}}=await sync.sb.auth.getSession();
       if(!session){ sync.state="out"; sync.sid=null; paint(); return; }
-      const {data:st,error}=await sync.sb.from("stores").select("id,name").maybeSingle();
+      const {data:st,error}=await sync.sb.rpc("my_store");
       if(error) throw error;
-      if(!st){ sync.state="err"; sync.msg="אין חנות לחשבון הזה. פתחו קודם חנות בנאמן."; paint(); return; }
-      sync.sid=st.id; sync.storeName=st.name||""; sync.email=session.user.email||"";
+      if(!st){ sync.state="err"; sync.msg="אין חנות לחשבון הזה, או שהעובד הושבת."; sync.sid=null; paint(); return; }
+      sync.sid=st.id; sync.storeName=st.name||""; sync.email=session.user.email||""; sync.role=st.role||"owner"; sync.slug=st.slug||""; sync.workerName=st.worker_name||"";
+      try{ document.body.classList.toggle("worker",sync.role==="worker"); if(sync.slug) localStorage.setItem(SLUGKEY,sync.slug); }catch(e){}
       // demo rows never go to the cloud; local data from before sync existed is queued as the oldest version
       for(const p of Object.keys(store)){ if(store[p]&&store[p].demo){ delete store[p]; delete queue[p]; delete meta[p]; } else if(!meta[p]){ meta[p]=1; queue[p]={d:store[p],ts:1}; } }
       saveSync(); persist(); emit();
@@ -257,12 +279,26 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
     if(error) throw error;
     await connect();
   }
-  async function signOut(){ try{ if(sync.sb) await sync.sb.auth.signOut(); }catch(e){} sync.sid=null; sync.state="out"; paint(); }
+  const wEmail=(slug,user)=>String(slug).trim().toLowerCase()+"."+String(user).trim().toLowerCase()+"@workers.neeman-app.com";
+  async function signInWorker(slug,user,pass){ return signIn(wEmail(slug,user),pass); }
+  const who=()=>sync.role==="worker"?sync.workerName:"";
+  const isWorker=()=>sync.role==="worker";
+  async function wApi(body){ const {data,error}=await sync.sb.functions.invoke("manage-workers",{body}); if(error){ let m=error.message; try{ const j=await error.context.json(); if(j&&j.error) m=j.error; }catch(e){} throw new Error(m); } if(data&&data.error) throw new Error(data.error); return data; }
+  async function signOut(){ try{ if(sync.sb) await sync.sb.auth.signOut(); }catch(e){} sync.sid=null; sync.role=""; try{ document.body.classList.remove("worker"); }catch(e){} sync.state="out"; paint(); }
   setInterval(()=>{ if(!document.hidden&&navigator.onLine) cycle(); },25000);
   addEventListener("online",()=>cycle());
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) cycle(); });
   document.addEventListener("DOMContentLoaded",()=>{ paint(); connect(); });
-  window.NSYNC={sync,cycle,paint,signIn,signOut,connect,pending};
+  window.NSYNC={sync,cycle,paint,signIn,signInWorker,signOut,connect,pending,who,isWorker,wApi};
+  const esc2=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const lsSlug=()=>{ try{ return localStorage.getItem(SLUGKEY)||""; }catch(e){ return ""; } };
+  async function loadWorkers(){
+    const box=document.getElementById("lWorkers"); if(!box||!sync.sb) return;
+    try{
+      const r=await wApi({action:"list"}); const sl=document.getElementById("wSlugShow"); if(sl) sl.textContent=r.slug;
+      box.innerHTML=r.workers.length?r.workers.map(x=>`<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div class="nm"><b>${esc2(x.name)}</b><span class="small muted" dir="ltr">${esc2(x.username)}${x.active?"":" · מושבת"}</span></div><div class="row"><button class="btn small" data-act="lwpass" data-u="${x.user_id}">סיסמה חדשה</button><button class="btn small" data-act="lwactive" data-u="${x.user_id}" data-on="${x.active?0:1}">${x.active?"השבת":"הפעל"}</button><button class="btn small ghost danger" data-act="lwdel" data-u="${x.user_id}">מחק</button></div></div>`).join(""):`<p class="muted small">עדיין אין עובדים.</p>`;
+    }catch(e){ box.innerHTML=`<p class="muted small">לא הצלחתי לטעון עובדים: ${esc2(e.message)}</p>`; }
+  }
   const db={
     doc(path){ return { path, get:async()=>snapDoc(path), set:async(data)=>{ store[path]=JSON.parse(JSON.stringify(data)); persist(); emit(); stamp(path,store[path]); }, update:async(data)=>{ store[path]={...(store[path]||{}),...data}; persist(); emit(); stamp(path,store[path]); }, delete:async()=>{ delete store[path]; persist(); emit(); stamp(path,null); }, onSnapshot:(fn)=>sub("doc",path,fn) }; },
     collection(name){ return { path:name, onSnapshot:(fn)=>sub("col",name,fn), get:async()=>snapCol(name) }; }
@@ -292,7 +328,16 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
   const downloads={ save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000); return {status:"saved"}; } };
   window.claude={ use:async(name)=>({db,sample,downloads}[name]||null) };
   window.LOCAL={
-    panel(){ const k=getKey(); setTimeout(paint,0); return `<div class="panel"><h3>סנכרון לענן</h3>${sync.sid?`<p class="muted">מחובר כ-<b>${sync.email}</b>${sync.storeName?" · "+sync.storeName:""}. כל שינוי נשמר בענן, ומופיע בכל מכשיר שמחובר לאותו חשבון. סטטוס: <b id="lSyncStat"></b></p><div class="row"><button class="btn primary" data-act="lsyncnow">סנכרן עכשיו</button><button class="btn ghost" data-act="lsignout">התנתק</button></div>`:`<p class="muted">התחברו עם אותו אימייל וסיסמה של נאמן, כדי שהנתונים יישמרו בענן ויתאחדו בין כל המכשירים והעובדים. בלי זה הנתונים נשמרים רק בדפדפן של המכשיר הזה. <span id="lSyncStat"></span></p><div class="grid"><label class="fld">אימייל<input id="lMail" type="email" autocomplete="username" dir="ltr"></label><label class="fld">סיסמה<input id="lPass" type="password" autocomplete="current-password" dir="ltr"></label></div><div class="row"><button class="btn primary" data-act="lsignin">התחבר</button></div>`}</div>
+    panel(){ const k=getKey(); setTimeout(paint,0); const w=sync.role==="worker"; if(w) setTimeout(()=>{},0); if(sync.role==="owner") setTimeout(loadWorkers,0);
+    const syncCard=sync.sid?`<div class="panel"><h3>${w?"החשבון שלי":"סנכרון לענן"}</h3><p class="muted">${w?`מחובר כ-<b>${esc2(sync.workerName)}</b> · ${esc2(sync.storeName)}. `:`מחובר כ-<b>${esc2(sync.email)}</b>${sync.storeName?" · "+esc2(sync.storeName):""}. כל שינוי נשמר בענן, ומופיע בכל מכשיר שמחובר לאותו חשבון. `}סטטוס: <b id="lSyncStat"></b></p><div class="row"><button class="btn primary" data-act="lsyncnow">סנכרן עכשיו</button><button class="btn ghost" data-act="lsignout">התנתק</button></div></div>`
+    :`<div class="panel"><h3>כניסה לענן</h3><p class="muted">התחברו כדי שהנתונים יישמרו בענן ויתאחדו בין כל המכשירים. בלי זה הנתונים נשמרים רק בדפדפן של המכשיר הזה. <span id="lSyncStat"></span></p>
+      <h4 style="margin:6px 0">כניסת עובד</h4><div class="grid"><label class="fld">קוד חנות<input id="wSlug" dir="ltr" autocapitalize="none" value="${esc2(lsSlug())}"></label><label class="fld">שם משתמש<input id="wUser" dir="ltr" autocapitalize="none" autocomplete="username"></label><label class="fld">סיסמה<input id="wPass" type="password" autocomplete="current-password" dir="ltr"></label></div><div class="row"><button class="btn primary" data-act="lwsignin">כניסה כעובד</button></div>
+      <details><summary>כניסת בעל החנות</summary><div class="grid"><label class="fld">אימייל<input id="lMail" type="email" autocomplete="username" dir="ltr"></label><label class="fld">סיסמה<input id="lPass" type="password" autocomplete="current-password" dir="ltr"></label></div><div class="row"><button class="btn primary" data-act="lsignin">התחבר</button></div></details></div>`;
+    const team=sync.role==="owner"?`<div class="panel"><h3>עובדים</h3><p class="muted">כל עובד נכנס עם שם משתמש וסיסמה משלו, ויכול לסרוק חשבוניות ולסמן ✓ בלבד. העובד לא רואה הגדרות, מחירים, ספקים או הצעות מחיר. קוד החנות לכניסה: <b dir="ltr" id="wSlugShow"></b></p>
+      <div id="lWorkers" class="list"><p class="muted small">טוען…</p></div>
+      <h4 style="margin:10px 0 4px">הוספת עובד</h4><div class="grid"><label class="fld">שם העובד<input id="wnName" placeholder="למשל: דני"></label><label class="fld">שם משתמש (אנגלית/ספרות)<input id="wnUser" dir="ltr" autocapitalize="none" placeholder="dani"></label><label class="fld">סיסמה (6 תווים ומעלה)<input id="wnPass" type="text" dir="ltr" autocomplete="off"></label></div><div class="row"><button class="btn primary" data-act="lwadd">הוסף עובד</button></div></div>`:"";
+    if(w) return syncCard;
+    return syncCard+team+`
       <div class="panel"><h3>קריאת צילומים ו-PDF</h3>
       <p class="muted">הקובץ עובד בלי Claude. כדי שהמערכת תקרא צילומי חשבוניות צריך מפתח API של Anthropic (נפתח ב-platform.claude.com, משלמים לפי שימוש, בערך 20 אגורות לחשבונית מצולמת עם Sonnet). אקסל והקלדה ידנית עובדים גם בלי מפתח.</p>
       <div class="grid"><label class="fld">מפתח API<input id="lKey" type="password" placeholder="sk-ant-..." value="${k?"••••••••"+k.slice(-4):""}"></label><label class="fld">מודל<select id="lModel"><option value="claude-sonnet-5-5" ${getModel()==="claude-sonnet-5-5"?"selected":""}>Sonnet 5.5 (מדויק, מומלץ)</option><option value="claude-haiku-5-5" ${getModel()==="claude-haiku-5-5"?"selected":""}>Haiku 5.5 (זול ומהיר)</option></select></label></div>
@@ -312,6 +357,11 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
     if(a==="lbackup"){ downloads.save({filename:"גיבוי-ספקים-"+new Date().toISOString().slice(0,10)+".json",data:new Blob([JSON.stringify(store)],{type:"application/json"})}); }
     if(a==="lrestore"){ fin.click(); }
     if(a==="lsignin"){ const em=document.getElementById("lMail").value.trim(), pw=document.getElementById("lPass").value; if(!em||!pw){ toastL("צריך אימייל וסיסמה"); return; } b.disabled=true; b.textContent="מתחבר…"; signIn(em,pw).then(()=>{ if(sync.sid){ toastL("מחובר. מסנכרן…"); setTimeout(()=>location.reload(),1200); } else { toastL("ההתחברות לא הושלמה: "+(sync.msg||"")); b.disabled=false; b.textContent="התחבר"; } }).catch(e=>{ toastL(/invalid/i.test(e.message||"")?"אימייל או סיסמה לא נכונים":"שגיאה: "+String(e.message||e).slice(0,100)); b.disabled=false; b.textContent="התחבר"; }); }
+    if(a==="lwsignin"){ const sl=document.getElementById("wSlug").value.trim(),us=document.getElementById("wUser").value.trim(),pw=document.getElementById("wPass").value; if(!sl||!us||!pw){ toastL("צריך קוד חנות, שם משתמש וסיסמה"); return; } b.disabled=true; b.textContent="נכנס…"; signInWorker(sl,us,pw).then(()=>{ if(sync.sid){ setTimeout(()=>{ location.hash="#inbox"; location.reload(); },600); } else { toastL("הכניסה לא הושלמה: "+(sync.msg||"")); b.disabled=false; b.textContent="כניסה כעובד"; } }).catch(e=>{ toastL(/invalid/i.test(e.message||"")?"קוד חנות, שם משתמש או סיסמה לא נכונים":"שגיאה: "+String(e.message||e).slice(0,100)); b.disabled=false; b.textContent="כניסה כעובד"; }); }
+    if(a==="lwadd"){ const name=document.getElementById("wnName").value.trim(),user=document.getElementById("wnUser").value.trim().toLowerCase(),pass=document.getElementById("wnPass").value; b.disabled=true; wApi({action:"create",name,username:user,password:pass}).then(()=>{ toastL("העובד נוסף. תן לו את קוד החנות, שם המשתמש והסיסמה"); ["wnName","wnUser","wnPass"].forEach(i=>document.getElementById(i).value=""); loadWorkers(); }).catch(e=>toastL(e.message)).finally(()=>{ b.disabled=false; }); }
+    if(a==="lwpass"){ const pw=prompt("סיסמה חדשה לעובד (6 תווים ומעלה):"); if(!pw) return; wApi({action:"setpass",user_id:b.dataset.u,password:pw}).then(()=>toastL("הסיסמה עודכנה")).catch(e=>toastL(e.message)); }
+    if(a==="lwactive"){ wApi({action:"setactive",user_id:b.dataset.u,active:b.dataset.on==="1"}).then(()=>{ toastL(b.dataset.on==="1"?"העובד הופעל":"העובד הושבת. הוא לא יוכל לעבוד יותר"); loadWorkers(); }).catch(e=>toastL(e.message)); }
+    if(a==="lwdel"){ if(!confirm("למחוק את העובד? הנתונים שהוא העלה נשארים.")) return; wApi({action:"remove",user_id:b.dataset.u}).then(()=>{ toastL("העובד נמחק"); loadWorkers(); }).catch(e=>toastL(e.message)); }
     if(a==="lsyncnow"){ cycle().then(()=>toastL(sync.state==="ok"?"מסונכרן":"שגיאה: "+sync.msg)); }
     if(a==="lsignout"){ if(pending() && !confirm("יש "+pending()+" שינויים שלא נשלחו לענן. אם תתנתקו עכשיו הם יישארו רק במכשיר הזה. להתנתק?")) return; signOut().then(()=>location.reload()); }
   });
@@ -336,7 +386,7 @@ const fmtDate = d => d ? d.split("-").reverse().join("/") : "—";
 
 /* ---------- state ---------- */
 const DEF = { vat: 18, margin: 30, rounding: "90", alertPct: 1, cheaperPct: 2 };
-const S = { settings: { ...DEF }, suppliers: {}, products: {}, purchases: [], quotes: [], changes: [], ready: false };
+const S = { settings: { ...DEF }, suppliers: {}, products: {}, purchases: [], quotes: [], changes: [], orderitems: [], ready: false };
 let IDX = {};
 let db = null, sample = null, downloads = null;
 let view = "inbox";
@@ -385,7 +435,7 @@ function computeDoc(doc, sup) {
 function buildIdx() {
   IDX = {};
   const add = (pid, rec, k) => { (IDX[pid] ||= { inv: [], q: [] })[k].push(rec); };
-  for (const p of S.purchases) (p.lines || []).forEach(l => { if (l.pid && l.eff > 0) add(l.pid, { sup: p.supplierId, date: p.date || "", at: p.createdAt || 0, eff: l.eff, doc: p.id, docNo: p.docNo, unitPrice: n(l.unitPrice), qty: n(l.qty), free: n(l.freeQty), pack: n(l.packSize) || 1, disc: n(l.lineDiscountPct) }, "inv"); });
+  for (const p of S.purchases) (p.lines || []).forEach(l => { if (l.pid && l.eff > 0) add(l.pid, { sup: p.supplierId, code: l.supplierCode || "", date: p.date || "", at: p.createdAt || 0, eff: l.eff, doc: p.id, docNo: p.docNo, unitPrice: n(l.unitPrice), qty: n(l.qty), free: n(l.freeQty), pack: n(l.packSize) || 1, disc: n(l.lineDiscountPct) }, "inv"); });
   for (const q of S.quotes) (q.lines || []).forEach(l => { if (l.pid && l.eff > 0) add(l.pid, { sup: q.supplierId, date: q.date || "", at: q.createdAt || 0, eff: l.eff, doc: q.id, validUntil: q.validUntil || "", unitPrice: n(l.unitPrice), qty: n(l.qty), free: n(l.freeQty), pack: n(l.packSize) || 1, disc: n(l.lineDiscountPct) }, "q"); });
   const ord = (a, b) => (b.date || "").localeCompare(a.date || "") || (b.at - a.at);
   for (const v of Object.values(IDX)) { v.inv.sort(ord); v.q.sort(ord); }
@@ -435,6 +485,7 @@ function subscribe() {
   db.collection("products").onSnapshot(once(s => { S.products = {}; s.docs.forEach(d => S.products[d.id] = { id: d.id, ...d.data() }); }), err);
   db.collection("purchases").onSnapshot(once(s => { S.purchases = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
   db.collection("quotes").onSnapshot(once(s => { S.quotes = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
+  db.collection("orderitems").onSnapshot(s => { S.orderitems = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, err);
   db.collection("pricechanges").onSnapshot(s => { S.changes = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.at - a.at); refresh(); }, err);
 }
 function setStatus(t) { $("#status").textContent = t; }
@@ -450,14 +501,16 @@ function refresh() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["inbox", "alerts", "products", "compare", "quotes", "suppliers", "invoices", "setup"];
-function route() { const h = location.hash.slice(1); view = VIEWS.includes(h) ? h : "inbox"; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(); }
+const VIEWS = ["inbox", "scan", "alerts", "products", "compare", "quotes", "suppliers", "invoices", "setup"];
+const WORKER_VIEWS = ["inbox", "scan", "invoices", "setup"];
+const isWorker = () => !!(window.NSYNC && NSYNC.isWorker());
+function route() { const h = location.hash.slice(1); view = VIEWS.includes(h) ? h : "inbox"; if (isWorker() && !WORKER_VIEWS.includes(view)) view = "inbox"; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(); }
 window.addEventListener("hashchange", route);
 function go(v) { if (location.hash !== "#" + v) location.hash = v; else route(); }
 
 function render() {
   const el = $("#view");
-  const R = { inbox: vInbox, alerts: vAlerts, products: vProducts, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
+  const R = { inbox: vInbox, scan: vScan, alerts: vAlerts, products: vProducts, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
   el.innerHTML = R();
   after[view]?.();
 }
@@ -1168,6 +1221,7 @@ async function saveDraft() {
       lines.push({ pid, barcode: l.barcode || "", supplierCode: l.supplierCode || "", name: l.name, qty: n(l.qty), freeQty: n(l.freeQty), packSize: n(l.packSize) || 1, unitPrice: n(l.unitPrice), lineDiscountPct: n(l.lineDiscountPct), lineTotal: l.lineTotal ?? null, arrived: !!l.arrived, eff: C.eff[i] ? +C.eff[i].toFixed(4) : null });
     }
     const rec = { supplierId: supId, docNo: calc.docNo, date: calc.date, pricesIncludeVat: calc.pricesIncludeVat, docDiscount: calc.docDiscount, docDiscPct: +C.docDiscPct.toFixed(3), totalExVat: +C.totalExVat.toFixed(2), totalWithVat: +(doc.printedTotal || C.totalWithVat).toFixed(2), lines, createdAt: mergeDoc?.createdAt || Date.now(), source: d.source || "manual" };
+    { const by = (window.NSYNC && NSYNC.who()) || ""; if (by) rec.by = by; else if (mergeDoc?.by) rec.by = mergeDoc.by; }
     if (mergeDoc?.demo) rec.demo = true;
     if (isQ) rec.validUntil = doc.validUntil || "";
     const id = d.editId || mergeDoc?.id || uid();
@@ -1475,10 +1529,10 @@ function docModal(kind, id) {
   const x = (kind === "q" ? S.quotes : S.purchases).find(d => d.id === id); if (!x) return;
   const bg = document.createElement("div"); bg.className = "modal-bg";
   bg.innerHTML = `<div class="modal"><div class="row between"><h2>${esc(supName(x.supplierId))}</h2><button class="btn ghost" data-x>סגור</button></div>
-  <p class="muted">${kind === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)} · ${x.pricesIncludeVat ? "מחירים כולל מע\"מ" : "מחירים לפני מע\"מ"}${x.docDiscPct ? ` · הנחה כללית ${n(x.docDiscPct).toFixed(2)}%` : ""}</p>
+  <p class="muted">${kind === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)}${x.by ? " · הועלה ע״י " + esc(x.by) : ""} · ${x.pricesIncludeVat ? "מחירים כולל מע\"מ" : "מחירים לפני מע\"מ"}${x.docDiscPct ? ` · הנחה כללית ${n(x.docDiscPct).toFixed(2)}%` : ""}</p>
   <div class="tbl"><table><thead><tr><th>הגיע</th><th>מוצר</th><th>כמות</th><th>בונוס</th><th>מחיר</th><th>הנחה</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${(x.lines || []).map(l => `<tr><td style="color:var(--good);font-weight:700">${l.arrived ? "✓" : "—"}</td><td>${esc(l.name)}<br><span class="small muted num">${esc(l.barcode || "")}</span></td><td class="num">${l.qty}${l.packSize > 1 ? " ×" + l.packSize : ""}</td><td class="num">${l.freeQty || "—"}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${l.lineDiscountPct ? l.lineDiscountPct + "%" : "—"}</td><td class="num">${money(l.eff)}</td></tr>`).join("")}</tbody></table></div>
   <div class="row"><span>סה"כ: <b class="num">${money(x.totalWithVat)}</b></span></div>
-  <div class="row between"><button class="btn" data-edit>פתח לעריכה</button><button class="btn ghost danger" data-del>מחק</button></div>
+  <div class="row between"><button class="btn" data-edit>פתח לעריכה</button>${isWorker() ? "" : `<button class="btn ghost danger" data-del>מחק</button>`}</div>
   <div class="warnbox" data-confirm hidden>למחוק את המסמך? העלויות שלו יוסרו מההשוואות. <button class="btn danger" data-delyes>כן, מחק</button></div></div>`;
   document.body.append(bg);
   bg.addEventListener("click", async e => {
@@ -1494,8 +1548,151 @@ function docModal(kind, id) {
   });
 }
 
+
+/* ---------- SCAN & ORDER ---------- */
+const SC = { q: "", pid: null, qty: "", sup: "", msg: "", list: [] };
+const zl = t => String(t || "").replace(/^0+/, "");
+function findByBarcode(code) {
+  const c = zl(cleanBarcode(code)); if (!c) return null;
+  return Object.values(S.products).find(p => zl(cleanBarcode(p.barcode)) === c) || null;
+}
+function searchProducts(q) {
+  const toks = norm(q).split(" ").filter(Boolean); if (!toks.length) return [];
+  return Object.values(S.products).filter(p => { const nm = norm(p.name) + " " + (p.barcode || ""); return toks.every(t => nm.includes(t)); }).slice(0, 8);
+}
+function offersFor(pid) {
+  buildIdxIfNeeded();
+  return stats(pid).offers.slice().sort((a, b) => a.eff - b.eff);
+}
+function buildIdxIfNeeded() { if (!Object.keys(IDX).length && (S.purchases.length || S.quotes.length)) buildIdx(); }
+function popularQtys(pid) {
+  const ix = IDX[pid] || { inv: [] }; const cnt = {};
+  ix.inv.forEach((r, i) => { const q = Math.round(n(r.qty)); if (q > 0) { (cnt[q] ||= { q, c: 0, first: i }).c++; } });
+  const pop = Object.values(cnt).sort((a, b) => b.c - a.c || a.first - b.first).slice(0, 3).map(x => x.q);
+  const out = [...pop]; for (const d of [1, 6, 12, 24, 2]) { if (out.length >= 6) break; if (!out.includes(d)) out.push(d); }
+  return { pop, all: out };
+}
+const waPhone = p => { let d = String(p || "").replace(/\D/g, ""); if (!d) return ""; if (d.startsWith("00")) d = d.slice(2); if (d.startsWith("0")) d = "972" + d.slice(1); return d; };
+const openItems = () => S.orderitems.filter(i => i.status === "open");
+function scCard() {
+  const p = S.products[SC.pid]; if (!p) return "";
+  const offs = offersFor(SC.pid);
+  if (!offs.length) return `<div class="sccard"><b>${esc(p.name)}</b><p class="muted">אין עדיין מחיר ספק למוצר הזה. סרוק חשבונית או הצעת מחיר שכוללת אותו.</p></div>`;
+  const best = offs[0]; const vf = vatF(); const ix = IDX[SC.pid] || { inv: [] }; const last = ix.inv[0];
+  const supId = offs.some(o => o.sup === SC.sup) ? SC.sup : best.sup;
+  const chosen = offs.find(o => o.sup === supId) || best;
+  const pq = popularQtys(SC.pid);
+  const lastQ = ix.inv.find(r => r.sup === supId);
+  const others = offs.filter(o => o !== best).slice(0, 3);
+  return `<div class="sccard">
+    <div><b>${esc(p.name)}</b> <span class="small muted num" dir="ltr">${esc(p.barcode || "")}</span></div>
+    <div class="scbest">הכי זול: ${esc(supName(best.sup))} · <span class="num">${money(best.eff)}</span></div>
+    <div class="small muted">ליחידה לפני מע"מ · ${money(best.eff * vf)} כולל מע"מ · ${best.kind === "q" ? "הצעת מחיר" : "חשבונית"} ${fmtDate(best.date)}${best.pack > 1 ? " · אריזה של " + best.pack : ""}</div>
+    ${others.length ? `<div class="small">${others.map(o => `${esc(supName(o.sup))} ${money(o.eff)} <span class="muted">(+${((o.eff / best.eff - 1) * 100).toFixed(0)}%)</span>`).join(" · ")}</div>` : `<div class="small muted">ספק אחד בלבד לפריט הזה</div>`}
+    ${last && last.sup !== best.sup ? `<div class="warnbox">קנית לאחרונה מ-${esc(supName(last.sup))} ב-${money(last.eff)}. אצל ${esc(supName(best.sup))} זול ב-${((1 - best.eff / last.eff) * 100).toFixed(0)}%.</div>` : ""}
+    <label class="fld">להזמין מ<select id="scSup">${offs.map(o => `<option value="${esc(o.sup)}" ${o.sup === supId ? "selected" : ""}>${esc(supName(o.sup))} · ${money(o.eff)}</option>`).join("")}</select></label>
+    <div class="small muted">כמות להזמנה${lastQ ? ` (בהזמנה האחרונה מ${esc(supName(supId))}: ${lastQ.qty})` : ""}</div>
+    <div class="qchips">${pq.all.map(q => `<button class="qchip ${String(q) === String(SC.qty) ? "on" : ""}" data-sc="qty" data-v="${q}">${q}${pq.pop.includes(q) ? " ★" : ""}</button>`).join("")}<input id="scQty" type="number" min="1" inputmode="numeric" placeholder="כמות אחרת" value="${pq.all.map(String).includes(String(SC.qty)) ? "" : esc(SC.qty)}" style="width:110px"></div>
+    <div class="row"><button class="btn primary" data-sc="add">הוסף להזמנה</button><button class="btn ghost" data-sc="clear">ביטול</button></div>
+  </div>`;
+}
+function scOrders() {
+  const items = openItems(); if (!items.length) return `<div class="panel"><h3>רשימת הזמנה</h3><p class="muted">הרשימה ריקה. סרוק מוצר והוסף אותו, והרשימה תתקבץ לפי ספק.</p></div>`;
+  const by = {}; items.forEach(i => (by[i.supId] ||= []).push(i));
+  const sent = S.orderitems.filter(i => i.status === "sent").sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0)).slice(0, 30);
+  return `<div class="panel"><h3>רשימת הזמנה</h3>${Object.entries(by).map(([sid, L]) => {
+    const sup = S.suppliers[sid] || {}; let est = 0;
+    const rows = L.map(i => { const o = offersFor(i.pid).find(x => x.sup === sid); const pr = o ? o.eff * (o.pack || 1) * n(i.qty) : 0; est += pr; return `<div class="scrow"><div><b>${esc(S.products[i.pid]?.name || "מוצר")}</b><div class="small muted">${o ? money(o.eff * (o.pack || 1)) + " ליחידת הזמנה" : ""}${i.by ? " · " + esc(i.by) : ""}</div></div>
+      <div class="scstep"><button class="btn small" data-sc="dec" data-id="${esc(i.id)}">−</button><b class="num">${n(i.qty)}</b><button class="btn small" data-sc="inc" data-id="${esc(i.id)}">+</button><button class="btn small ghost danger" data-sc="rm" data-id="${esc(i.id)}" title="הסר">✕</button></div></div>`; }).join("");
+    return `<div class="sccard" style="margin-bottom:10px"><div class="row between"><b>${esc(sup.name || "ספק")}</b><span class="small muted">בערך ${money(est)} לפני מע"מ</span></div>${rows}
+      <div class="row"><button class="btn primary" data-sc="wa" data-sup="${esc(sid)}">שלח בוואטסאפ</button><button class="btn" data-sc="copy" data-sup="${esc(sid)}">העתק</button><button class="btn" data-sc="sent" data-sup="${esc(sid)}">✓ נשלח</button></div>${sup.phone ? "" : `<div class="small muted">אין טלפון לספק. אפשר להוסיף בלשונית ספקים, או לבחור איש קשר בוואטסאפ.</div>`}</div>`;
+  }).join("")}</div>${sent.length ? `<details class="panel"><summary>נשלחו לאחרונה (${sent.length})</summary>${sent.map(i => `<div class="scrow"><div>${esc(S.products[i.pid]?.name || "מוצר")} · ${n(i.qty)} · <span class="muted">${esc(supName(i.supId))}</span></div><button class="btn small" data-sc="back" data-id="${esc(i.id)}">החזר לרשימה</button></div>`).join("")}</details>` : ""}`;
+}
+function vScan() {
+  const msg = SC.msg ? `<div class="note">${esc(SC.msg)}</div>` : "";
+  const res = !SC.pid && SC.list.length ? `<div class="list">${SC.list.map(p => `<div class="li click" data-sc="pick" data-id="${esc(p.id)}" style="grid-template-columns:minmax(0,1fr)"><div class="nm"><b>${esc(p.name)}</b><span class="small muted" dir="ltr">${esc(p.barcode || "")}</span></div></div>`).join("")}</div>` : "";
+  return `${demoNote()}<div class="panel"><h2>סריקה והזמנה</h2>
+    <div class="sc-top"><button class="btn primary" data-sc="cam">📷 סרוק ברקוד</button><input id="scQ" placeholder="ברקוד או שם מוצר" value="${esc(SC.q)}" inputmode="search" autocomplete="off"><button class="btn" data-sc="go">חפש</button></div>
+    ${msg}${res}${scCard()}</div>${scOrders()}`;
+}
+function scHandle(code) {
+  SC.q = String(code || "").trim(); SC.qty = ""; SC.list = []; SC.msg = "";
+  const p = findByBarcode(SC.q);
+  if (p) { SC.pid = p.id; const o = offersFor(p.id); SC.sup = o[0]?.sup || ""; }
+  else { SC.pid = null; SC.msg = `לא מצאתי מוצר עם הברקוד ${SC.q}. אפשר לחפש לפי שם.`; }
+  go("scan"); render();
+}
+function scGo() {
+  const q = (SC.q || "").trim(); if (!q) return;
+  if (/^\d{6,14}$/.test(q.replace(/\s/g, ""))) return scHandle(q.replace(/\s/g, ""));
+  SC.list = searchProducts(q); SC.pid = null; SC.msg = SC.list.length ? "" : "לא נמצא מוצר בשם הזה."; render();
+}
+async function scAdd() {
+  const qty = Math.round(n(SC.qty)); if (!(qty > 0)) { toast("בחר כמות"); return; }
+  const sup = $("#scSup")?.value || SC.sup; if (!sup) return;
+  const ex = openItems().find(i => i.pid === SC.pid && i.supId === sup);
+  const by = (window.NSYNC && NSYNC.who()) || "";
+  if (ex) { const { id, ...rest } = ex; await put("orderitems/" + id, { ...rest, qty: n(ex.qty) + qty }); }
+  else await put("orderitems/" + uid(), { pid: SC.pid, supId: sup, qty, status: "open", at: Date.now(), by });
+  const nm = S.products[SC.pid]?.name || ""; SC.pid = null; SC.q = ""; SC.qty = ""; SC.list = []; SC.msg = ""; toast("נוסף להזמנה: " + nm); render(); setTimeout(() => $("#scQ")?.focus(), 50);
+}
+async function scSet(id, patch) { const it = S.orderitems.find(i => i.id === id); if (!it) return; const { id: _i, ...rest } = it; await put("orderitems/" + id, { ...rest, ...patch }); }
+function orderText(sid) {
+  const store = (window.NSYNC && NSYNC.sync.storeName) || "";
+  const lines = openItems().filter(i => i.supId === sid).map(i => { const o = offersFor(i.pid).find(x => x.sup === sid); const code = o?.code ? ` (מק"ט ${o.code})` : ""; return `• ${S.products[i.pid]?.name || "מוצר"}${code} – ${n(i.qty)}`; });
+  return `שלום, הזמנה${store ? " מ" + store : ""}:\n${lines.join("\n")}\nתודה`;
+}
+/* camera: BarcodeDetector where the browser has it, otherwise the ZXing library */
+let scanStop = null;
+async function scCam() {
+  if (scanStop) return;
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal"><div class="row between"><h2>סרוק ברקוד</h2><button class="btn ghost" data-x>סגור</button></div><video class="scvideo" playsinline muted autoplay></video><p class="small muted" id="scHint">כוון את המצלמה אל הברקוד</p></div>`;
+  document.body.append(bg); const video = bg.querySelector("video"); let stopped = false, stream = null, reader = null, lastCode = "";
+  const stop = () => { stopped = true; try { stream?.getTracks().forEach(t => t.stop()); } catch (e) {} try { reader?.reset(); } catch (e) {} bg.remove(); scanStop = null; };
+  scanStop = stop; bg.addEventListener("click", e => { if (e.target === bg || e.target.closest("[data-x]")) stop(); });
+  const found = code => { if (stopped || !code || code === lastCode) return; lastCode = code; try { navigator.vibrate?.(60); } catch (e) {} stop(); scHandle(code); };
+  const fail = m => { const h = bg.querySelector("#scHint"); if (h) h.textContent = m; };
+  try {
+    if ("BarcodeDetector" in window) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      video.srcObject = stream; await video.play().catch(() => {});
+      const det = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"] });
+      const tick = async () => { if (stopped) return; try { const r = await det.detect(video); if (r && r[0]) return found(r[0].rawValue); } catch (e) {} setTimeout(tick, 200); };
+      tick();
+    } else {
+      if (!window.ZXing) await new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"; sc.onload = ok; sc.onerror = () => no(new Error("zxing")); document.head.append(sc); });
+      reader = new ZXing.BrowserMultiFormatReader();
+      reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, video, (res) => { if (res) found(res.getText()); });
+    }
+  } catch (e) { fail(e && e.name === "NotAllowedError" ? "אין הרשאה למצלמה. אפשר להקליד את הברקוד בשדה." : "לא הצלחתי לפתוח מצלמה. אפשר להקליד את הברקוד בשדה."); }
+}
+(function scWire() {
+  const view = $("#view");
+  view.addEventListener("input", e => { if (e.target.id === "scQ") SC.q = e.target.value; if (e.target.id === "scQty") { SC.qty = e.target.value; view.querySelectorAll(".qchip").forEach(c => c.classList.remove("on")); } });
+  view.addEventListener("change", e => { if (e.target.id === "scSup") { SC.sup = e.target.value; } });
+  view.addEventListener("keydown", e => { if (e.target.id === "scQ" && e.key === "Enter") { e.preventDefault(); scGo(); } });
+  view.addEventListener("click", async e => {
+    const b = e.target.closest("[data-sc]"); if (!b) return; const a = b.dataset.sc;
+    if (a === "cam") scCam();
+    else if (a === "go") scGo();
+    else if (a === "pick") { scHandle(S.products[b.dataset.id]?.barcode || ""); if (!SC.pid) { SC.pid = b.dataset.id; SC.sup = offersFor(SC.pid)[0]?.sup || ""; SC.msg = ""; render(); } }
+    else if (a === "qty") { SC.qty = b.dataset.v; render(); }
+    else if (a === "add") await scAdd();
+    else if (a === "clear") { SC.pid = null; SC.q = ""; SC.qty = ""; SC.list = []; SC.msg = ""; render(); }
+    else if (a === "inc" || a === "dec") { const it = S.orderitems.find(i => i.id === b.dataset.id); if (it) await scSet(it.id, { qty: Math.max(1, n(it.qty) + (a === "inc" ? 1 : -1)) }); }
+    else if (a === "rm") await scSet(b.dataset.id, { status: "removed" });
+    else if (a === "back") await scSet(b.dataset.id, { status: "open" });
+    else if (a === "sent") { for (const i of openItems().filter(i => i.supId === b.dataset.sup)) await scSet(i.id, { status: "sent", sentAt: Date.now() }); toast("סומן כנשלח"); }
+    else if (a === "copy") { const t = orderText(b.dataset.sup); try { await navigator.clipboard.writeText(t); toast("הועתק"); } catch (err) { prompt("העתק את ההזמנה:", t); } }
+    else if (a === "wa") { const ph = waPhone(S.suppliers[b.dataset.sup]?.phone); window.open("https://wa.me/" + ph + "?text=" + encodeURIComponent(orderText(b.dataset.sup)), "_blank", "noopener"); }
+  });
+})();
+window.NSCAN = { handle: scHandle, SC };
+
 /* ---------- SETTINGS ---------- */
 function vSetup() {
+  if (isWorker()) return window.LOCAL ? LOCAL.panel() : "";
   const s = S.settings; const hasDemo = [...Object.values(S.products), ...Object.values(S.suppliers), ...S.purchases, ...S.quotes].some(x => x.demo);
   return `<div class="panel"><h2>הגדרות החנות</h2>
   <div class="grid">
