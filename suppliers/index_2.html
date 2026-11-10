@@ -121,6 +121,11 @@ td.best{background:var(--good-soft);color:var(--good);font-weight:600}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 details summary{cursor:pointer;color:var(--accent);font-weight:500}
+.camstage{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;max-height:62vh;margin:0 auto}.camstage video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.camframe{position:absolute;border:3px dashed #fff;border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:border-color .15s}.camframe.ok{border-color:#2ecc71;border-style:solid}
+.camstate{font-weight:600;margin:6px 0}.camstate.good{color:#1b7a3a}.camstate.warn{color:#b45309}
+.camwrap{max-width:520px}
+
 .sc-top{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}.sc-top input{flex:1;min-width:150px}
 .sccard{border:1px solid var(--line,#ddd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .scbest{font-size:20px;font-weight:700}.qchips{display:flex;gap:6px;flex-wrap:wrap}
@@ -578,35 +583,133 @@ async function addFiles(files) {
 $("#fXls").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadExcel(f, "invoice"); });
 $("#fPos").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadExcel(f, "pos"); });
 
-/* camera: phones open the camera from the file input; computers use the webcam in a window */
+/* camera: an in-app camera that finds the paper by itself (A4 page, wide page, long till receipt) and says what to fix. */
+const CAM_MSG = {
+  light: "אור חלש. הוסיפו אור או הדליקו פלאש",
+  none: "הניחו את המסמך מול המצלמה",
+  closer: "התקרבו, המסמך קטן בתמונה",
+  cut: "המסמך נחתך בקצה התמונה. התרחקו כך שכל המסמך ייראה",
+  blur: "החזיקו יציב, התמונה לא חדה",
+  ok: "מצוין. אפשר לצלם",
+  done: "הדף נקלט. הניחו את הדף הבא",
+};
+const CAM_TYPE = { page: "דף", wide: "מסמך לרוחב", long: "קבלה ארוכה" };
+/* find the paper in the view: the biggest bright, colourless region. gray/sat: grids gw x gh. */
+function analyzePaper(gray, sat, gw, gh, sharp) {
+  const n = gw * gh, sorted = Uint8Array.from(gray).sort();
+  const p95 = sorted[Math.floor(n * 0.95)], p10 = sorted[Math.floor(n * 0.1)];
+  const out = (state, extra) => ({ state, p95, ...extra });
+  if (p95 - p10 < 25) return out("none");
+  if (p95 < 105) return out("light");
+  const thr = Math.max(100, p95 * 0.8);
+  const mask = new Uint8Array(n); for (let i = 0; i < n; i++) mask[i] = gray[i] >= thr && sat[i] < 40 ? 1 : 0;
+  // open: drop thin bridges (towel edges, cables)
+  const m2 = new Uint8Array(n);
+  for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) { const i = y * gw + x; if (mask[i] && mask[i - 1] && mask[i + 1] && mask[i - gw] && mask[i + gw]) m2[i] = 1; }
+  const lab = new Int32Array(n), stack = []; let best = null, id = 0;
+  for (let s = 0; s < n; s++) {
+    if (!m2[s] || lab[s]) continue; id++; let area = 0, x0 = gw, y0 = gh, x1 = 0, y1 = 0; stack.push(s); lab[s] = id;
+    while (stack.length) { const i = stack.pop(); area++; const x = i % gw, y = (i / gw) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (const j of [i - 1, i + 1, i - gw, i + gw]) { if (j < 0 || j >= n) continue; if ((j === i - 1 && x === 0) || (j === i + 1 && x === gw - 1)) continue; if (m2[j] && !lab[j]) { lab[j] = id; stack.push(j); } } }
+    if (!best || area > best.area) best = { id, area, x0, y0, x1: x1 + 1, y1: y1 + 1 };
+  }
+  if (!best) return out("none");
+  const bw = best.x1 - best.x0, bh = best.y1 - best.y0, fill = best.area / (bw * bh);
+  // text inside the paper = dark pixels inside its box
+  let dark = 0, tot = 0; for (let y = best.y0; y < best.y1; y++) for (let x = best.x0; x < best.x1; x++) { tot++; if (gray[y * gw + x] < thr * 0.6) dark++; }
+  const darkFrac = dark / Math.max(1, tot);
+  const cover = Math.max(bw / gw, bh / gh), areaFrac = (bw * bh) / n;
+  const edge = 2, cut = { l: best.x0 <= edge, r: best.x1 >= gw - edge, t: best.y0 <= edge, b: best.y1 >= gh - edge };
+  const touches = cut.l || cut.r || cut.t || cut.b;
+  const long = Math.max(bw, bh), short = Math.min(bw, bh), aspect = long / Math.max(1, short);
+  const type = aspect >= 2.1 ? "long" : bw > bh * 1.15 ? "wide" : "page";
+  const info = { bbox: { x: best.x0, y: best.y0, w: bw, h: bh }, fill, darkFrac, cover, areaFrac, type, cut, aspect };
+  const lowText = darkFrac < 0.01 && areaFrac >= 0.15;
+  if ((darkFrac < 0.01 && !lowText) || areaFrac < 0.04) return out("none", info);
+  if (touches) return out("cut", info);
+  if (cover < 0.68 || areaFrac < 0.22) return out("closer", info);
+  if (lowText || (sharp != null && sharp < 0.45)) return out("blur", info);
+  return out("ok", info);
+}
+
 async function openCam() {
-  const phone = matchMedia("(pointer:coarse)").matches;
-  if (phone || !navigator.mediaDevices?.getUserMedia) { $("#fCam").click(); return; }
+  const fallback = () => { if (matchMedia("(pointer:coarse)").matches) $("#fCam").click(); else $("#fImg").click(); };
+  if (!navigator.mediaDevices?.getUserMedia) { fallback(); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
-  catch (e) { toast("אין גישה למצלמה במחשב הזה. בחר קובץ תמונה, או צלם מהטלפון."); $("#fImg").click(); return; }
+  catch (e) { toast("אין גישה למצלמה. אפשר לצלם עם מצלמת המכשיר או לבחור קובץ."); fallback(); return; }
   const bg = document.createElement("div"); bg.className = "modal-bg";
-  bg.innerHTML = `<div class="modal"><div class="row between"><h2>צילום חשבונית</h2><span class="small muted" data-count>0 דפים</span></div>
-    <video autoplay playsinline muted style="width:100%;border-radius:8px;background:#000"></video>
-    <p class="small muted">החזק את החשבונית ישר מול המצלמה ובאור טוב. בחשבונית של כמה דפים צלם כל דף בנפרד.</p>
-    <div class="row"><button class="btn primary" data-shot>צלם דף</button><button class="btn" data-done>סיימתי</button></div></div>`;
+  bg.innerHTML = `<div class="modal camwrap"><div class="row between"><h2>צילום חשבונית</h2><span class="small muted" data-count>0 דפים</span></div>
+    <div class="camstage"><video autoplay playsinline muted></video><div class="camframe" data-frame></div></div>
+    <p class="camstate" data-state>${CAM_MSG.none}</p><p class="small muted" data-hint hidden>קבלה ארוכה מאוד? צלמו בחלקים, מלמעלה למטה, עם חפיפה של שורה או שתיים בין הצילומים.</p>
+    <div class="row"><button class="btn primary" data-shot disabled>צלם דף</button><button class="btn ghost" data-force hidden>צלם בכל זאת</button><button class="btn" data-torch hidden>🔦</button><button class="btn" data-done>סיימתי</button></div>
+    <p class="small muted">המצלמה מזהה לבד את סוג המסמך. המסמך צריך להיכנס כולו לתמונה, בלי להיחתך בקצוות.</p></div>`;
   document.body.append(bg);
-  const v = bg.querySelector("video"); v.srcObject = stream;
-  let shots = 0;
-  const stop = () => { stream.getTracks().forEach(t => t.stop()); bg.remove(); };
+  const v = bg.querySelector("video"), stage = bg.querySelector(".camstage"), fr = bg.querySelector("[data-frame]"), st = bg.querySelector("[data-state]"), shotBtn = bg.querySelector("[data-shot]"), forceBtn = bg.querySelector("[data-force]"), hint = bg.querySelector("[data-hint]");
+  v.srcObject = stream;
+  let shots = 0, okStreak = 0, ready = false, state = "none", since = Date.now(), stopped = false, timer = 0, cool = 0, last = null, cur = null;
+  const track = stream.getVideoTracks()[0];
+  try { if (track.getCapabilities?.().torch) bg.querySelector("[data-torch]").hidden = false; } catch (e) {}
+  const g = document.createElement("canvas"), gx = g.getContext("2d", { willReadFrequently: true }), sc = document.createElement("canvas"), sx = sc.getContext("2d", { willReadFrequently: true });
+  const setState = (s2, type) => { if (s2 !== state) { state = s2; since = Date.now(); } st.textContent = s2 === "ok" && type ? "זוהה: " + CAM_TYPE[type] + ". " + CAM_MSG.ok : CAM_MSG[s2]; st.className = "camstate " + (s2 === "ok" ? "good" : "warn"); fr.classList.toggle("ok", s2 === "ok"); hint.hidden = type !== "long"; };
+  const showBox = (bx) => {
+    // bx in 0..1 of the video; smooth so the outline does not jitter
+    cur = cur ? { x: cur.x + (bx.x - cur.x) * 0.5, y: cur.y + (bx.y - cur.y) * 0.5, w: cur.w + (bx.w - cur.w) * 0.5, h: cur.h + (bx.h - cur.h) * 0.5 } : bx;
+    Object.assign(fr.style, { left: cur.x * 100 + "%", top: cur.y * 100 + "%", width: cur.w * 100 + "%", height: cur.h * 100 + "%" });
+  };
+  const tick = () => {
+    if (stopped) return;
+    try {
+      const vw = v.videoWidth, vh = v.videoHeight;
+      if (vw) {
+        stage.style.aspectRatio = vw + " / " + vh;
+        const GW = 120, GH = Math.max(8, Math.round(GW * vh / vw)); g.width = GW; g.height = GH; gx.drawImage(v, 0, 0, GW, GH);
+        const d = gx.getImageData(0, 0, GW, GH).data, gray = new Uint8Array(GW * GH), sat = new Uint8Array(GW * GH);
+        for (let i = 0; i < GW * GH; i++) { const R = d[i * 4], G = d[i * 4 + 1], B = d[i * 4 + 2]; gray[i] = (R * 0.299 + G * 0.587 + B * 0.114) | 0; sat[i] = Math.max(R, G, B) - Math.min(R, G, B); }
+        let sharp = null, a = analyzePaper(gray, sat, GW, GH, null);
+        if (a.bbox && a.state !== "none") {
+          // sharpness from the middle of the paper at full resolution
+          const bx = a.bbox, sw = Math.max(8, Math.round(bx.w / GW * vw * 0.4)), sh = Math.max(8, Math.round(bx.h / GH * vh * 0.25)), sx0 = Math.round((bx.x + bx.w * 0.3) / GW * vw), sy0 = Math.round((bx.y + bx.h * 0.375) / GH * vh);
+          sc.width = 160; sc.height = 160; sx.drawImage(v, sx0, sy0, sw, sh, 0, 0, 160, 160);
+          const sd = sx.getImageData(0, 0, 160, 160).data, gr = []; for (let i = 0; i < 160 * 160; i++) gr.push(sd[i * 4] * 0.299 + sd[i * 4 + 1] * 0.587 + sd[i * 4 + 2] * 0.114);
+          const grads = []; for (let y = 0; y < 159; y++) for (let x = 0; x < 159; x++) { const i = y * 160 + x; grads.push(Math.abs(gr[i + 1] - gr[i]) + Math.abs(gr[i + 160] - gr[i])); }
+          grads.sort((p, q) => p - q); const g95 = grads[Math.floor(grads.length * 0.95)]; const sub = gr.filter((_, i) => i % 7 === 0), lo = Math.min(...sub), hi = Math.max(...sub);
+          sharp = hi - lo < 25 ? null : Math.min(1, g95 / (0.5 * (hi - lo)));
+          a = analyzePaper(gray, sat, GW, GH, sharp);
+        }
+        last = a; window.NCAM_LAST = { state: a.state, type: a.type, sharp, cut: a.cut, areaFrac: a.areaFrac };
+        if (a.bbox && a.state !== "none") showBox({ x: a.bbox.x / GW, y: a.bbox.y / GH, w: a.bbox.w / GW, h: a.bbox.h / GH });
+        else { cur = null; Object.assign(fr.style, { left: "8%", top: "6%", width: "84%", height: "88%" }); }
+        if (Date.now() < cool) { okStreak = 0; setState("done"); }
+        else { okStreak = a.state === "ok" ? okStreak + 1 : 0; setState(a.state === "ok" ? (okStreak >= 2 || state === "ok" ? "ok" : state) : a.state, a.state === "ok" || state === "ok" ? a.type : null); }
+      }
+    } catch (e) { console.error(e); }
+    ready = state === "ok"; shotBtn.disabled = !ready; forceBtn.hidden = ready || Date.now() - since < 6000;
+    timer = setTimeout(tick, 350);
+  };
+  tick();
+  const stop = () => { stopped = true; clearTimeout(timer); try { stream.getTracks().forEach(t => t.stop()); } catch (e) {} bg.remove(); };
+  const shoot = async (framed) => {
+    const vw = v.videoWidth, vh = v.videoHeight; if (!vw) return;
+    let sx0 = 0, sy0 = 0, sw = vw, sh = vh, type = "";
+    if (framed && last && last.bbox) { const GW = 120, GH = Math.max(8, Math.round(GW * vh / vw)), m = 0.015, bx = last.bbox;
+      sx0 = Math.max(0, (bx.x / GW - m) * vw); sy0 = Math.max(0, (bx.y / GH - m) * vh); sw = Math.min(vw - sx0, (bx.w / GW + 2 * m) * vw); sh = Math.min(vh - sy0, (bx.h / GH + 2 * m) * vh); type = last.type; }
+    const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
+    c.getContext("2d").drawImage(v, sx0, sy0, sw, sh, 0, 0, c.width, c.height);
+    const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.92));
+    const f = new File([blob], `page-${Date.now()}.jpg`, { type: "image/jpeg" });
+    draft.files.push({ file: f, kind: "img", url: URL.createObjectURL(f), framed, docType: type });
+    shots++; bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
+    okStreak = 0; cool = Date.now() + 1600; setState("done"); try { navigator.vibrate?.(40); } catch (e) {}
+  };
   bg.addEventListener("click", async e => {
     if (e.target.closest("[data-done]") || e.target === bg) { stop(); render(); }
-    if (e.target.closest("[data-shot]")) {
-      const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
-      if (!c.width) return;
-      c.getContext("2d").drawImage(v, 0, 0);
-      const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
-      const f = new File([blob], `page-${Date.now()}.jpg`, { type: "image/jpeg" });
-      draft.files.push({ file: f, kind: "img", url: URL.createObjectURL(f) });
-      shots++; bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
-    }
+    else if (e.target.closest("[data-shot]")) { if (ready) await shoot(true); }
+    else if (e.target.closest("[data-force]")) await shoot(false);
+    else if (e.target.closest("[data-torch]")) { try { const on = !bg._torch; await track.applyConstraints({ advanced: [{ torch: on }] }); bg._torch = on; } catch (er) { toast("הפלאש לא נתמך במכשיר הזה"); } }
   });
 }
+window.NCAM = { analyzePaper };
 
 
 /* ---------- PDF text tables: read a digital PDF without AI ---------- */
