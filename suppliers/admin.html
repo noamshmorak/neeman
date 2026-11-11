@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>נאמן: ניהול מערכת</title>
+<style>
+:root{--bg:#f3f5f2;--surface:#fff;--line:#d5dbd3;--ink:#18211d;--muted:#5d6b64;--accent:#0f6b55;--bad:#b3261e;--warn:#9a6700}
+@media(prefers-color-scheme:dark){:root{--bg:#111614;--surface:#1a211e;--line:#2c3833;--ink:#e7eee9;--muted:#9aaba3;--accent:#4fbfa3;--bad:#ff8a80;--warn:#e3b341}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0}
+h1{font-size:1.1rem;margin:0}main{max-width:960px;margin:0 auto;padding:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.between{justify-content:space-between}
+.muted{color:var(--muted);font-size:.9rem}.bad{color:var(--bad)}.warn{color:var(--warn)}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.5}
+input{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0;flex:1}
+.pill{font-size:.8rem;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
+.grid div{background:var(--bg);border-radius:8px;padding:8px 10px}.grid b{display:block;font-size:1.15rem}
+.sub{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+#login{max-width:380px;margin:12vh auto}#msg{min-height:1.4em}
+</style>
+</head>
+<body>
+<header><h1>נאמן · ניהול מערכת</h1><div class="row"><span class="muted" id="who"></span><button id="out" hidden>יציאה</button></div></header>
+<main>
+<div id="login" class="card"><h2 style="margin-top:0">כניסת מנהל</h2>
+<form id="f" class="row" style="flex-direction:column;align-items:stretch">
+<input id="em" type="email" dir="ltr" placeholder="אימייל" autocomplete="username" required>
+<input id="pw" type="password" dir="ltr" placeholder="סיסמה" autocomplete="current-password" required>
+<button class="primary" type="submit">כניסה</button></form></div>
+<p id="msg" class="muted"></p>
+<div id="app" hidden></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+const sb=supabase.createClient("https://ruqrkmmiblgertdewutw.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1cXJrbW1pYmxnZXJ0ZGV3dXR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODYxMzIsImV4cCI6MjEwOTI2MjEzMn0.vhtxvsZWtD6w6wXt9hANSs6vLUn6KuWLBiPUNgslCyk");
+const $=s=>document.querySelector(s), esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const msg=(t,bad)=>{const m=$("#msg");m.textContent=t||"";m.className=bad?"bad":"muted"};
+const fmt=d=>d?new Date(d).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}):"אף פעם";
+async function api(body){
+  const {data,error}=await sb.functions.invoke("admin-api",{body});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error==="admin only"?"אין לחשבון הזה הרשאת ניהול":j.error}catch(e){}throw new Error(m)}
+  if(data&&data.error)throw new Error(data.error);return data;
+}
+function userRow(u,label){
+  return `<div class="sub" data-u="${esc(u.user_id)}"><div class="row between"><div><b>${esc(label)}</b> <span class="pill ${u.banned||u.active===false?"bad":""}">${u.banned||u.active===false?"מושבת":"פעיל"}</span>
+  <div class="muted" dir="ltr" style="text-align:right">${esc(u.email)}</div><div class="muted">כניסה אחרונה: ${fmt(u.last_sign_in)}</div></div>
+  <div class="row"><button data-a="toggle" data-on="${u.banned||u.active===false?1:0}">${u.banned||u.active===false?"הפעל":"השבת"}</button></div></div>
+  <form class="row" data-a="pass" style="margin-top:8px"><input type="password" dir="ltr" autocomplete="new-password" placeholder="סיסמה חדשה (8 תווים ומעלה)" minlength="8"><button type="submit">אפס סיסמה</button></form></div>`;
+}
+async function load(){
+  msg("טוען…");const d=await api({action:"overview"});msg("");
+  const t=d.stores.reduce((a,s)=>({docs:a.docs+s.docs,ai:a.ai+s.ai_today}),{docs:0,ai:0});
+  $("#app").innerHTML=`<div class="grid"><div><b>${d.stores.length}</b>חנויות</div><div><b>${t.docs}</b>מסמכים בענן</div><div><b>${t.ai}</b>עמודי AI היום</div></div>`+
+  d.stores.map(s=>`<div class="card" data-s="${esc(s.id)}"><div class="row between"><div><b>${esc(s.name)}</b> <span class="pill" dir="ltr">${esc(s.slug)}</span> <span class="pill">${esc(s.plan)}</span></div>
+  <button data-a="workers">עובדים (${s.workers})</button></div>
+  <div class="grid"><div><b>${s.docs}</b>מסמכים</div><div><b>${s.ai_today}</b>AI היום</div><div><b>${fmt(s.created_at).split(",")[0]}</b>נפתחה</div></div>
+  ${userRow({user_id:s.owner,...s.owner_info},"בעל החנות")}<div class="workers"></div></div>`).join("");
+}
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("button[data-a]");if(!b||b.closest("form"))return;
+  try{
+    if(b.dataset.a==="workers"){const card=b.closest("[data-s]");const box=card.querySelector(".workers");b.disabled=true;const d=await api({action:"workers",store_id:card.dataset.s});b.disabled=false;
+      box.innerHTML=d.workers.length?d.workers.map(w=>userRow(w,"עובד: "+(w.name||w.username))).join(""):'<p class="muted sub">אין עובדים</p>'}
+    if(b.dataset.a==="toggle"){const u=b.closest("[data-u]").dataset.u,on=b.dataset.on==="1";
+      if(!on&&!confirm("להשבית את המשתמש? הוא לא יוכל להיכנס. שום נתון לא יימחק."))return;
+      b.disabled=true;await api({action:"setactive",user_id:u,active:on});msg(on?"המשתמש הופעל":"המשתמש הושבת");await load()}
+  }catch(err){msg(err.message,true);b.disabled=false}
+});
+document.addEventListener("submit",async e=>{
+  const f=e.target;if(f.id==="f"){e.preventDefault();msg("מתחבר…");
+    const {error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
+    if(error){msg("אימייל או סיסמה לא נכונים",true);return}start();return}
+  if(f.dataset.a==="pass"){e.preventDefault();const u=f.closest("[data-u]").dataset.u,inp=f.querySelector("input");
+    if(inp.value.length<8){msg("הסיסמה חייבת להיות לפחות 8 תווים",true);return}
+    if(!confirm("לשנות את הסיסמה של המשתמש הזה?"))return;
+    try{await api({action:"setpass",user_id:u,password:inp.value});inp.value="";msg("הסיסמה עודכנה. מסור אותה למשתמש בצורה בטוחה.")}catch(err){msg(err.message,true)}}
+});
+$("#out").onclick=async()=>{await sb.auth.signOut();location.reload()};
+async function start(){
+  const {data:{session}}=await sb.auth.getSession();if(!session)return;
+  $("#login").hidden=true;$("#out").hidden=false;$("#who").textContent=session.user.email;$("#app").hidden=false;
+  try{await load()}catch(err){msg(err.message,true);$("#app").hidden=true}
+}
+start();
+</script>
+</body>
+</html>
