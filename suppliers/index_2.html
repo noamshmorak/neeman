@@ -1858,7 +1858,15 @@ function scHandle(code) {
   SC.q = String(code || "").trim(); SC.qty = ""; SC.list = []; SC.msg = "";
   const p = findByBarcode(SC.q);
   if (p) { SC.pid = p.id; const o = offersFor(p.id); SC.sup = o[0]?.sup || ""; }
-  else { SC.pid = null; SC.msg = `לא מצאתי מוצר עם הברקוד ${SC.q}. אפשר לחפש לפי שם.`; }
+  else {
+    SC.pid = null;
+    const cm = S.catMeta?.cols, row = S.cat[catKey(SC.q)] || S.cat[catKey(zl(SC.q))] || Object.values(S.cat).find(r => zl(String(r.code || "")) === zl(SC.q));
+    if (row && cm) {
+      const g = f => cm[f] >= 0 ? row.r?.[cm[f]] : "";
+      const price = nn(g("price")), cost = nn(g("cost"));
+      SC.msg = `נמצא בקטלוג הקופה: ${String(g("desc") || "").trim() || "(בלי שם)"}. ${price ? "מחיר מכירה בקופה: " + money(price) + ". " : "אין מחיר מכירה בקופה. "}${cost ? "עלות בקטלוג: " + money(cost) + ". " : ""}עדיין אין לו כרטיס מוצר אצלך, כנראה לא נקלט בחשבונית.`;
+    } else SC.msg = `לא מצאתי מוצר עם הברקוד ${SC.q}. ${Object.keys(S.cat || {}).length ? "גם לא בקטלוג הקופה." : "קטלוג הקופה עוד לא נטען (לשונית קטלוג קופה)."} אפשר לחפש לפי שם.`;
+  }
   go("scan"); render();
 }
 function scGo() {
