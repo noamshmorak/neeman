@@ -529,8 +529,8 @@ function subscribe() {
   db.collection("purchases").onSnapshot(once(s => { S.purchases = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
   db.collection("quotes").onSnapshot(once(s => { S.quotes = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
   db.collection("orderitems").onSnapshot(s => { S.orderitems = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, err);
-  db.collection("poscat").onSnapshot(s => { S.cat = {}; s.docs.forEach(d => S.cat[d.id] = { id: d.id, ...d.data() }); refresh(); }, err);
-  db.doc("poscatmeta/main").onSnapshot(s => { S.catMeta = s.exists ? s.data() : null; refresh(); }, err);
+  db.collection("poscat").onSnapshot(s => { S.catRaw = s.docs.map(d => ({ id: d.id, ...d.data() })); buildCat(); refresh(); }, err);
+  db.doc("poscatmeta/main").onSnapshot(s => { S.catMeta = s.exists ? s.data() : null; buildCat(); refresh(); }, err);
   db.collection("remind").onSnapshot(s => { S.remind = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); setTimeout(() => window.checkRemind && checkRemind(), 300); }, err);
   db.collection("pricechanges").onSnapshot(s => { S.changes = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.at - a.at); refresh(); }, err);
 }
@@ -1860,7 +1860,7 @@ function scHandle(code) {
   if (p) { SC.pid = p.id; const o = offersFor(p.id); SC.sup = o[0]?.sup || ""; }
   else {
     SC.pid = null;
-    const cm = S.catMeta?.cols, row = S.cat[catKey(SC.q)] || S.cat[catKey(zl(SC.q))] || Object.values(S.cat).find(r => zl(String(r.code || "")) === zl(SC.q));
+    const cm = S.catMeta?.cols, row = S.cat[catFindKey(SC.q)] || Object.values(S.cat).find(r => zl(String(r.code || "")) === zl(SC.q));
     if (row && cm) {
       const g = f => cm[f] >= 0 ? row.r?.[cm[f]] : "";
       const price = nn(g("price")), cost = nn(g("cost"));
@@ -2036,6 +2036,46 @@ const CAT_FIELDS = { code: ["קוד פריט", "ברקוד", "barcode", "item co
 Object.assign(FIELD_LBL, { code: "קוד פריט (ברקוד)", desc: "תיאור", cost: "עלות (לפני מע\"מ)", price: "מחיר מכירה" });
 let catMap = null, catFilter = "all", catQ = "";
 const catKey = c => String(c).trim().replace(/[\/\s.#?]/g, "_");
+/* Aviv exports EAN-13 barcodes without the check digit (12 digits) */
+const catCode = c => { c = String(c).trim(); return /^\d{13}$/.test(c) ? c.slice(0, -1) : c; };
+function catFindKey(code, tmp) {
+  const c = String(code).trim();
+  for (const x of [c, catCode(c), c.replace(/^0+/, "")]) { const k = catKey(x); if ((tmp && tmp[k]) || S.cat[k]) return k; }
+  return catKey(catCode(c));
+}
+/* the catalog is stored in chunks of 400 rows (a few dozen documents instead of tens of thousands) */
+const CAT_CH = 400, catChId = i => "c" + String(i).padStart(4, "0");
+function buildCat() {
+  S.cat = {}; const raw = S.catRaw || [], cols = S.catMeta?.cols; if (!raw.length) return;
+  let o = 0;
+  for (const d of raw.slice().sort((a, b) => a.id < b.id ? -1 : 1)) {
+    if (Array.isArray(d.rows)) {
+      if (!cols) continue;
+      d.rows.forEach((r, i) => { const code = String(r[cols.code] ?? "").trim(); const id = d.kk?.[i] || catKey(code); const x = d.x?.[i] || {}; S.cat[id] = { id, code, r, st: x.st || "", was: x.was, at: x.at, o: o++, ch: d.id }; });
+    } else S.cat[d.id] = { ...d, o: o++ };
+  }
+}
+function catPack(rows) {
+  const x = {}, kk = {};
+  rows.forEach((r, i) => { if (r.st || r.was || r.at) { x[i] = { st: r.st || "" }; if (r.was) x[i].was = r.was; if (r.at) x[i].at = r.at; } if (r.id !== catKey(r.code)) kk[i] = r.id; });
+  return { rows: rows.map(r => r.r), x, kk };
+}
+/* rows changed in memory (acc.tmp) -> the chunk documents to write */
+function catEntries(acc) {
+  const tmp = acc.tmp, byCh = {}, fresh = [];
+  for (const r of Object.values(tmp)) { if (S.cat[r.id] && S.cat[r.id].ch) (byCh[S.cat[r.id].ch] ||= []).push(r.id); else fresh.push(r); }
+  const chunks = [...new Set(Object.values(S.cat).map(r => r.ch).filter(Boolean))].sort();
+  let last = chunks.length ? chunks[chunks.length - 1] : catChId(0);
+  const count = id => Object.values(S.cat).filter(r => r.ch === id).length;
+  let lastCount = chunks.length ? count(last) : 0; const addTo = {};
+  for (const r of fresh) { if (lastCount >= CAT_CH) { last = catChId(parseInt(last.slice(1), 10) + 1); lastCount = 0; } (addTo[last] ||= []).push(r); lastCount++; byCh[last] ||= []; }
+  const out = [];
+  for (const id of Object.keys(byCh)) {
+    const rows = Object.values(S.cat).filter(r => r.ch === id).sort((a, b) => a.o - b.o).map(r => tmp[r.id] || r).concat(addTo[id] || []);
+    out.push(["poscat/" + id, catPack(rows)]);
+  }
+  return out;
+}
 const catRows = () => Object.values(S.cat).sort((a, b) => (a.o || 0) - (b.o || 0));
 const r2 = v => Math.round(v * 100) / 100;
 async function putMany(entries) {
@@ -2055,7 +2095,13 @@ async function loadCat(file) {
     while (rows.length && rows[rows.length - 1].every(c => String(c).trim() === "")) rows.pop();
     let headerRow = 0, best = -1;
     rows.slice(0, 15).forEach((r, i) => { const sc = r.filter(c => Object.values(CAT_FIELDS).flat().some(k => norm(c).includes(norm(k)))).length; if (sc > best) { best = sc; headerRow = i; } });
-    catMap = { rows, headerRow, cols: guessCols(rows[headerRow] || [], CAT_FIELDS), fname: file.name, sheet: sh, ext: /\.xls$/i.test(file.name) ? "xls" : "xlsx" };
+    const cols0 = guessCols(rows[headerRow] || [], CAT_FIELDS);
+    if (cols0.code < 0) { // no recognisable header: take the column that looks most like barcodes / item codes
+      const used = new Set(Object.values(cols0)); const body = rows.slice(headerRow + 1, headerRow + 301); let bc = -1, bs = 0;
+      for (let c = 0; c < (rows[headerRow] || []).length; c++) { if (used.has(c)) continue; const sc = body.filter(r => /^\d{5,14}$/.test(String(r[c] ?? "").trim())).length; if (sc > bs) { bs = sc; bc = c; } }
+      if (bc >= 0 && bs >= body.length * 0.3) cols0.code = bc;
+    }
+    catMap = { rows, headerRow, cols: cols0, fname: file.name, sheet: sh, ext: /\.xls$/i.test(file.name) ? "xls" : "xlsx" };
     go("cat"); render();
   } catch (e) { console.error(e); toast("לא הצלחתי לקרוא את הקובץ. ודא שזה אקסל או CSV."); }
 }
@@ -2066,16 +2112,18 @@ async function applyCat() {
   const data = st.rows.slice(st.headerRow + 1);
   const entries = []; const seen = new Set(); let o = 0;
   // remove an older catalog first (a re-import replaces it)
-  const old = Object.keys(S.cat); for (const k of old) await del("poscat/" + k);
+  const oldIds = new Set([...(S.catRaw || []).map(d => d.id)]); for (const id of oldIds) await del("poscat/" + id);
+  const rowsOut = [];
   for (const r of data) {
     if (r.every(c => String(c).trim() === "")) continue;
     let key = catKey(r[st.cols.code] ?? ""); if (!key || seen.has(key)) key = "x" + (++o) + "-" + uid().slice(0, 4);
     seen.add(key);
-    entries.push(["poscat/" + key, { code: String(r[st.cols.code] ?? "").trim(), r: head.map((_, i) => r[i] ?? ""), st: "", o: entries.length }]);
+    rowsOut.push({ id: key, code: String(r[st.cols.code] ?? "").trim(), r: head.map((_, i) => r[i] ?? ""), st: "" });
   }
-  entries.push(["poscatmeta/main", { fname: st.fname, ext: st.ext, sheet: st.sheet, pre: st.rows.slice(0, st.headerRow), header: head, cols: st.cols, count: data.length, at: Date.now() }]);
+  for (let i = 0; i * CAT_CH < rowsOut.length; i++) entries.push(["poscat/" + catChId(i), catPack(rowsOut.slice(i * CAT_CH, (i + 1) * CAT_CH))]);
+  entries.push(["poscatmeta/main", { fname: st.fname, ext: st.ext, sheet: st.sheet, pre: st.rows.slice(0, st.headerRow), header: head, cols: st.cols, count: rowsOut.length, at: Date.now() }]);
   await putMany(entries);
-  catMap = null; toast(`הקטלוג נשמר: ${data.length} שורות`); render();
+  catMap = null; toast(`הקטלוג נשמר: ${rowsOut.length} שורות`); render();
 }
 /* change one cost/price cell, remember what it was, and mark the row for us (not part of the exported file) */
 function catPatch(row, patch, st) {
@@ -2088,28 +2136,27 @@ function catPatch(row, patch, st) {
 }
 function catSetPriceEntries(code, price, acc) {
   if (!S.catMeta || !catCodeOk(code)) return;
-  const k = catKey(code), row = acc.tmp[k] || S.cat[k]; if (!row) return;
+  const k = catFindKey(code, acc.tmp), row = acc.tmp[k] || S.cat[k]; if (!row) return;
   const cols = S.catMeta.cols; if (cols.price < 0) return;
   if (n(row.r[cols.price]) === n(price) && row.r[cols.price] !== "") return;
-  const doc = catPatch(row, { price }, "price"); acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc);
+  const doc = catPatch(row, { price }, "price"); acc.tmp[k] = { id: k, ...doc, ch: row.ch };
 }
-async function catSetPrice(code, price) { const acc = { tmp: {}, entries: new Map() }; catSetPriceEntries(code, price, acc); await putMany([...acc.entries]); }
+async function catSetPrice(code, price) { const acc = { tmp: {}, entries: new Map() }; catSetPriceEntries(code, price, acc); await putMany(catEntries(acc)); }
 
 /* after an invoice is saved: costs of existing rows, new rows for new products, reminders */
 async function afterInvoice(lines, newFlags) {
   const acc = { tmp: {}, entries: new Map() }; const rems = [];
   const cols = S.catMeta?.cols; const header = S.catMeta?.header || [];
-  let maxO = Math.max(-1, ...Object.values(S.cat).map(r => r.o || 0));
   lines.forEach((l, i) => {
     const p = S.products[l.pid]; if (!p) return;
     const code = cleanBarcode(p.barcode || l.barcode), eff = l.eff;
     if (S.catMeta && code && catCodeOk(code) && eff) {
-      const k = catKey(code), row = acc.tmp[k] || S.cat[k], cost = r2(eff);
+      const k = catFindKey(code, acc.tmp), row = acc.tmp[k] || S.cat[k], cost = r2(eff);
       if (row) {
-        if (cols.cost >= 0 && !(Math.abs(n(row.r[cols.cost]) - cost) < 0.005 && row.r[cols.cost] !== "")) { const doc = catPatch(row, { cost }, "cost"); acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc); }
+        if (cols.cost >= 0 && !(Math.abs(n(row.r[cols.cost]) - cost) < 0.005 && row.r[cols.cost] !== "")) { const doc = catPatch(row, { cost }, "cost"); acc.tmp[k] = { id: k, ...doc, ch: row.ch }; }
       } else {
-        const r = header.map(() => ""); r[cols.code] = code; if (cols.desc >= 0) r[cols.desc] = p.name; if (cols.cost >= 0) r[cols.cost] = cost; if (cols.price >= 0 && p.sellPrice) r[cols.price] = n(p.sellPrice);
-        const doc = { code, r, st: "new", o: ++maxO, at: Date.now() }; acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc);
+        const r = header.map(() => ""); r[cols.code] = catCode(code); if (cols.desc >= 0) r[cols.desc] = p.name; if (cols.cost >= 0) r[cols.cost] = cost; if (cols.price >= 0 && p.sellPrice) r[cols.price] = n(p.sellPrice);
+        acc.tmp[k] = { id: k, code: catCode(code), r, st: "new", at: Date.now() };
       }
     }
     if (newFlags[i]) {
@@ -2120,7 +2167,7 @@ async function afterInvoice(lines, newFlags) {
       }
     }
   });
-  await putMany([...acc.entries, ...rems]);
+  await putMany([...catEntries(acc), ...rems]);
 }
 
 /* ---------- catalog screen ---------- */
@@ -2172,7 +2219,7 @@ document.addEventListener("click", async e => {
   else if (a === "catapply") await applyCat();
   else if (a === "catfilter") { catFilter = b.dataset.k; render(); }
   else if (a === "catexport") await catExport();
-  else if (a === "catreset") { const ents = catRows().filter(r => r.st).map(r => { const d = { ...r }; delete d.id; d.st = ""; delete d.was; return ["poscat/" + r.id, d]; }); await putMany(ents); toast("הסימונים אופסו"); }
+  else if (a === "catreset") { const acc = { tmp: {}, entries: new Map() }; catRows().filter(r => r.st).forEach(r => { acc.tmp[r.id] = { ...r, st: "", was: undefined, at: undefined }; }); await putMany(catEntries(acc)); toast("הסימונים אופסו"); }
   else if (a === "catreplace") { if (confirm("להחליף את הקטלוג בקובץ חדש? הסימונים והעדכונים שבקטלוג הנוכחי יוחלפו.")) { const i = document.createElement("input"); i.type = "file"; i.accept = ".xls,.xlsx,.csv"; i.onchange = () => i.files[0] && loadCat(i.files[0]); i.click(); } }
   else if (a === "regcheck") regCheck();
 });
