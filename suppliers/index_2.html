@@ -1848,12 +1848,14 @@ function scOrders() {
   }).join("")}</div>${sent.length ? `<details class="panel"><summary>נשלחו לאחרונה (${sent.length})</summary>${sent.map(i => `<div class="scrow"><div>${esc(S.products[i.pid]?.name || "מוצר")} · ${n(i.qty)} · <span class="muted">${esc(supName(i.supId))}</span></div><button class="btn small" data-sc="back" data-id="${esc(i.id)}">החזר לרשימה</button></div>`).join("")}</details>` : ""}`;
 }
 function vScan() {
-  const msg = SC.msg ? `<div class="note">${esc(SC.msg)}</div>` : "";
+  const noCat = !S.catMeta || !Object.keys(S.cat || {}).length;
+  const msg = (SC.msg ? `<div class="note">${esc(SC.msg)}</div>` : "") + (noCat && !SC.msg ? `<div class="note warn">${esc(catMissingText())}</div>` : "");
   const res = !SC.pid && SC.list.length ? `<div class="list">${SC.list.map(p => `<div class="li click" data-sc="pick" data-id="${esc(p.id)}" style="grid-template-columns:minmax(0,1fr)"><div class="nm"><b>${esc(p.name)}</b><span class="small muted" dir="ltr">${esc(p.barcode || "")}</span></div></div>`).join("")}</div>` : "";
   return `${demoNote()}<div class="panel"><h2>סריקה והזמנה</h2>
     <div class="sc-top"><button class="btn primary" data-sc="cam">📷 סרוק ברקוד</button><input id="scQ" placeholder="ברקוד או שם מוצר" value="${esc(SC.q)}" inputmode="search" autocomplete="off"><button class="btn" data-sc="go">חפש</button></div>
     ${msg}${res}${scCard()}</div>${scOrders()}`;
 }
+function catMissingText() { return isWorker() ? "אין עדיין קובץ קטלוג של הקופה בחנות. בקש מבעל החנות להעלות אותו (פעם אחת), ואז הוא יופיע בכל המכשירים." : "אין עדיין קובץ קטלוג של הקופה בחנות, וצריך להעלות אותו. בלשונית \"קטלוג קופה\" טוענים את הקובץ פעם אחת, והוא נשמר בחנות ומופיע בכל המכשירים (טלפונים ועובדים)."; }
 function scHandle(code) {
   SC.q = String(code || "").trim(); SC.qty = ""; SC.list = []; SC.msg = "";
   const p = findByBarcode(SC.q);
@@ -1865,7 +1867,7 @@ function scHandle(code) {
       const g = f => cm[f] >= 0 ? row.r?.[cm[f]] : "";
       const price = nn(g("price")), cost = nn(g("cost"));
       SC.msg = `נמצא בקטלוג הקופה: ${String(g("desc") || "").trim() || "(בלי שם)"}. ${price ? "מחיר מכירה בקופה: " + money(price) + ". " : "אין מחיר מכירה בקופה. "}${cost ? "עלות בקטלוג: " + money(cost) + ". " : ""}עדיין אין לו כרטיס מוצר אצלך, כנראה לא נקלט בחשבונית.`;
-    } else SC.msg = `לא מצאתי מוצר עם הברקוד ${SC.q}. ${Object.keys(S.cat || {}).length ? "גם לא בקטלוג הקופה." : "קטלוג הקופה עוד לא נטען (לשונית קטלוג קופה)."} אפשר לחפש לפי שם.`;
+    } else SC.msg = `לא מצאתי מוצר עם הברקוד ${SC.q}. ${S.catMeta && Object.keys(S.cat || {}).length ? "גם לא בקטלוג הקופה. אפשר לחפש לפי שם." : catMissingText()}`;
   }
   go("scan"); render();
 }
@@ -2183,7 +2185,7 @@ function vCat() {
     return `<div class="panel"><div class="row between"><h2>קטלוג הקופה: ${esc(st.fname)}</h2><button class="btn ghost" data-act="catcancel">ביטול</button></div>
     <p class="muted">סמן איזו עמודה היא מה. כל שאר העמודות נשמרות כמו שהן וחוזרות בקובץ בדיוק באותו מבנה.</p>
     ${mapUI(st, CAT_FIELDS)}<div class="row"><button class="btn primary" data-act="catapply">שמור את הקטלוג (${st.rows.length - st.headerRow - 1} שורות)</button></div></div>`; }
-  if (!S.catMeta) return `<div class="panel"><h2>קטלוג הקופה (אביב קופות)</h2><p class="muted">מעלים פעם אחת את קובץ הקטלוג שאביב שלחו. מאותו רגע הקובץ נשמר כאן בדיוק כמו שהוא, עלויות מתעדכנות אוטומטית מכל חשבונית, מוצרים חדשים מתווספים, ושום דבר לא נמחק. בסוף מורידים קובץ מעודכן ומביאים לאביב.</p><div class="row"><button class="btn primary" data-act="catload">העלה את קובץ הקטלוג</button></div></div>`;
+  if (!S.catMeta) return `<div class="panel"><h2>קטלוג הקופה (אביב קופות)</h2><p class="muted">מעלים פעם אחת את קובץ הקטלוג שאביב שלחו. הקטלוג נשמר בחנות ומופיע לבד בכל המכשירים ולכל העובדים, בלי להעלות אותו שוב בכל מכשיר. מאותו רגע הקובץ נשמר כאן בדיוק כמו שהוא, עלויות מתעדכנות אוטומטית מכל חשבונית, מוצרים חדשים מתווספים, ושום דבר לא נמחק. בסוף מורידים קובץ מעודכן ומביאים לאביב.</p><div class="row"><button class="btn primary" data-act="catload">העלה את קובץ הקטלוג</button></div></div>`;
   const m = S.catMeta, c = catSummary();
   let rows = catRows();
   if (catFilter === "changed") rows = rows.filter(r => r.st); else if (["cost", "new", "price"].includes(catFilter)) rows = rows.filter(r => r.st === catFilter);
