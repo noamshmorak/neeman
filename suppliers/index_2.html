@@ -135,7 +135,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
 .scrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line,#eee)}
 .scstep{display:flex;gap:4px;align-items:center}.scstep button{width:34px;height:34px}.scstep b{min-width:28px;text-align:center}
 
-body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.worker #tabs a[data-v=quotes],body.worker #tabs a[data-v=compare],body.worker #tabs a[data-v=suppliers]{display:none}
+body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.worker #tabs a[data-v=cat],body.worker #tabs a[data-v=quotes],body.worker #tabs a[data-v=compare],body.worker #tabs a[data-v=suppliers]{display:none}
 .syncchip{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line,#ddd);text-decoration:none;color:inherit;margin-inline-start:8px;white-space:nowrap}
 .syncchip.ok{color:#1b7a3a;border-color:#1b7a3a}.syncchip.warn{color:#b45309;border-color:#b45309}.syncchip.err{color:#b91c1c;border-color:#b91c1c}
 </style>
@@ -150,6 +150,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
         <a href="#scan" data-v="scan">סריקה והזמנה</a>
         <a href="#alerts" data-v="alerts">התראות<span class="badge" id="badge" hidden></span></a>
         <a href="#products" data-v="products">מוצרים</a>
+        <a href="#cat" data-v="cat">קטלוג קופה</a>
         <a href="#quotes" data-v="quotes">הצעות מחיר</a>
         <a href="#compare" data-v="compare">מוצרים דומים</a>
         <a href="#suppliers" data-v="suppliers">ספקים</a>
@@ -306,7 +307,8 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
   }
   const db={
     doc(path){ return { path, get:async()=>snapDoc(path), set:async(data)=>{ store[path]=JSON.parse(JSON.stringify(data)); persist(); emit(); stamp(path,store[path]); }, update:async(data)=>{ store[path]={...(store[path]||{}),...data}; persist(); emit(); stamp(path,store[path]); }, delete:async()=>{ delete store[path]; persist(); emit(); stamp(path,null); }, onSnapshot:(fn)=>sub("doc",path,fn) }; },
-    collection(name){ return { path:name, onSnapshot:(fn)=>sub("col",name,fn), get:async()=>snapCol(name) }; }
+    collection(name){ return { path:name, onSnapshot:(fn)=>sub("col",name,fn), get:async()=>snapCol(name) }; },
+    bulk(entries){ const ts=Date.now(); for(const [path,data] of entries){ store[path]=JSON.parse(JSON.stringify(data)); meta[path]=ts; queue[path]={d:store[path],ts}; } saveSync(); persist(); emit(); paint(); kick(); }
   };
   async function toB64(blob){
     const bmp=await createImageBitmap(blob); const max=1800; const sc=Math.min(1,max/Math.max(bmp.width,bmp.height));
@@ -324,7 +326,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
         if(!(sync.sb&&sync.sid)) throw {code:"no_key",message:"no key"};
         /* no key on this device (a worker, or a new device): read through the server */
         const imgs=[]; for(const im of (opts.images||[])) imgs.push(await toB64(im));
-        let res; try{ res=await sync.sb.functions.invoke("read-invoice",{body:{prompt:prompt+"\n\nReply with the JSON only.",images:imgs}}); }catch(e){ throw {code:"network",message:String(e)}; }
+        let res; try{ res=await sync.sb.functions.invoke("read-invoice",{body:{prompt:prompt+"\n\nReply with the JSON only.",images:imgs,web:!!opts.web}}); }catch(e){ throw {code:"network",message:String(e)}; }
         if(res.error){ let j=null; try{ j=await res.error.context.json(); }catch(e){} const m=(j&&j.error)||res.error.message||"";
           throw {code:/daily limit/.test(m)?"daily_limit":/ANTHROPIC_API_KEY/.test(m)?"server_nokey":/not signed in|no store/.test(m)?"no_key":(j&&j.status===429)?"rate_limited":"upstream_error",message:m}; }
         if(opts.signal&&opts.signal.aborted) throw {code:"cancelled",message:"cancelled"};
@@ -333,7 +335,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
       const content=[]; for(const im of (opts.images||[])) content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:await toB64(im)}});
       content.push({type:"text",text:prompt+"\n\nReply with the JSON only."});
       let r;
-      try{ r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:opts.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:getModel(),max_tokens:12000,messages:[{role:"user",content}]})}); }
+      try{ r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:opts.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:getModel(),max_tokens:12000,...(opts.web?{tools:[{type:"web_search_20250305",name:"web_search",max_uses:5}]}:{}),messages:[{role:"user",content}]})}); }
       catch(e){ if(e.name==="AbortError") throw {code:"cancelled",message:"cancelled"}; throw {code:"network",message:String(e)}; }
       if(!r.ok){ const txt=await r.text().catch(()=> ""); throw {code:r.status===401?"bad_key":r.status===429?"rate_limited":r.status===404||/model/i.test(txt)&&r.status===400?"bad_model":"upstream_error",message:txt}; }
       const j=await r.json(); const t=(j.content||[]).filter(c=>c.type==="text").map(c=>c.text).join("");
@@ -401,7 +403,7 @@ const fmtDate = d => d ? d.split("-").reverse().join("/") : "—";
 
 /* ---------- state ---------- */
 const DEF = { vat: 18, margin: 30, rounding: "90", alertPct: 1, cheaperPct: 2 };
-const S = { settings: { ...DEF }, suppliers: {}, products: {}, purchases: [], quotes: [], changes: [], orderitems: [], ready: false };
+const S = { settings: { ...DEF }, suppliers: {}, products: {}, purchases: [], quotes: [], changes: [], orderitems: [], cat: {}, catMeta: null, remind: [], ready: false };
 let IDX = {};
 let db = null, sample = null, downloads = null;
 let view = "inbox";
@@ -471,14 +473,16 @@ function stats(pid) {
   const sell = nn(p.sellPrice);
   const sellEx = sell ? sell / vf : null;
   const margin = sellEx && cost ? (sellEx - cost) / sellEx : null;
-  const rec = cost ? roundPrice(cost / (1 - target) * vf) : null;
+  const regMax = regMaxOf(p);
+  const rec = regMax ?? (cost ? roundPrice(cost / (1 - target) * vf) : null);
   const change = cur && prevSame ? cur.eff / prevSame.eff - 1 : null;
   const alerts = [];
-  if (cost && !sell) alerts.push({ t: "noprice", sev: "warn", txt: `אין מחיר מכירה. עלות ליחידה ${money(cost)} לפני מע"מ, מחיר מומלץ ${money(rec)}.` });
-  if (margin != null && margin < target - 0.005) alerts.push({ t: "margin", sev: "bad", txt: `הרווח ירד ל-${pct(margin)} (היעד ${pct(target, 0)}). מחיר מומלץ לצרכן ${money(rec)} במקום ${money(sell)}.` });
+  if (cost && !sell) alerts.push({ t: "noprice", sev: "warn", txt: regMax ? `מוצר בפיקוח ואין מחיר מכירה. המחיר המקסימלי ${money(regMax)} (עלות ${money(cost)} לפני מע"מ).` : `אין מחיר מכירה. עלות ליחידה ${money(cost)} לפני מע"מ, מחיר מומלץ ${money(rec)}.` });
+  if (regMax && sell && sell > regMax + 0.005) alerts.push({ t: "regover", sev: "bad", txt: `מוצר בפיקוח: המחיר בחנות ${money(sell)} גבוה מהמחיר המקסימלי ${money(regMax)}.` });
+  if (!regMax && margin != null && margin < target - 0.005) alerts.push({ t: "margin", sev: "bad", txt: `הרווח ירד ל-${pct(margin)} (היעד ${pct(target, 0)}). מחיר מומלץ לצרכן ${money(rec)} במקום ${money(sell)}.` });
   if (change != null && change * 100 > n(S.settings.alertPct)) alerts.push({ t: "up", sev: "warn", txt: `${supName(cur.sup)} העלה מחיר ב-${pct(change)}: מ-${money(prevSame.eff)} ל-${money(cur.eff)} ליחידה (עלות אמיתית).` });
   if (cur && best && best.sup !== cur.sup && best.eff < cur.eff * (1 - n(S.settings.cheaperPct) / 100)) alerts.push({ t: "cheaper", sev: "info", txt: `אצל ${supName(best.sup)} זה עולה ${money(best.eff)} ליחידה${best.kind === "q" ? " (לפי הצעת מחיר)" : ""}, חיסכון של ${pct(1 - best.eff / cur.eff)} לעומת ${supName(cur.sup)}.` });
-  return { p, ix, cur, prevSame, offers, best, target, cost, sell, margin, rec, change, alerts };
+  return { p, ix, cur, prevSame, offers, best, target, cost, sell, margin, rec, change, alerts, regMax };
 }
 function allAlerts() {
   const out = [];
@@ -501,6 +505,9 @@ function subscribe() {
   db.collection("purchases").onSnapshot(once(s => { S.purchases = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
   db.collection("quotes").onSnapshot(once(s => { S.quotes = s.docs.map(d => ({ id: d.id, ...d.data() })); }), err);
   db.collection("orderitems").onSnapshot(s => { S.orderitems = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, err);
+  db.collection("poscat").onSnapshot(s => { S.cat = {}; s.docs.forEach(d => S.cat[d.id] = { id: d.id, ...d.data() }); refresh(); }, err);
+  db.doc("poscatmeta/main").onSnapshot(s => { S.catMeta = s.exists ? s.data() : null; refresh(); }, err);
+  db.collection("remind").onSnapshot(s => { S.remind = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); setTimeout(() => window.checkRemind && checkRemind(), 300); }, err);
   db.collection("pricechanges").onSnapshot(s => { S.changes = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.at - a.at); refresh(); }, err);
 }
 function setStatus(t) { $("#status").textContent = t; }
@@ -516,7 +523,7 @@ function refresh() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["inbox", "scan", "alerts", "products", "compare", "quotes", "suppliers", "invoices", "setup"];
+const VIEWS = ["inbox", "scan", "alerts", "products", "cat", "compare", "quotes", "suppliers", "invoices", "setup"];
 const WORKER_VIEWS = ["inbox", "scan", "invoices", "setup"];
 const isWorker = () => !!(window.NSYNC && NSYNC.isWorker());
 function route() { const h = location.hash.slice(1); view = VIEWS.includes(h) ? h : "inbox"; if (isWorker() && !WORKER_VIEWS.includes(view)) view = "inbox"; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(); }
@@ -525,7 +532,7 @@ function go(v) { if (location.hash !== "#" + v) location.hash = v; else route();
 
 function render() {
   const el = $("#view");
-  const R = { inbox: vInbox, scan: vScan, alerts: vAlerts, products: vProducts, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
+  const R = { inbox: vInbox, scan: vScan, alerts: vAlerts, products: vProducts, cat: vCat, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
   el.innerHTML = R();
   after[view]?.();
 }
@@ -1321,7 +1328,7 @@ function lineCard(l, i, C, supId) {
   const sell = p?.sellPrice ? n(p.sellPrice) : null;
   const mg = sell && eff ? (sell / vatF() - eff) / (sell / vatF()) : null;
   const target = st ? st.target : n(S.settings.margin) / 100;
-  const rec = eff ? roundPrice(eff / (1 - target) * vatF()) : null;
+  const rec = regMaxOf(p) ?? (eff ? roundPrice(eff / (1 - target) * vatF()) : null);
   const howPill = { barcode: `<span class="pill good">זוהה לפי ברקוד</span>`, alias: `<span class="pill good">זוהה לפי שם אצל הספק</span>`, name: `<span class="pill info">זוהה לפי שם</span>`, new: `<span class="pill warn">מוצר חדש</span>`, manual: `<span class="pill good">שויך ידנית</span>` }[l.how || "new"];
   const isFree = n(l.qty) === 0 && n(l.freeQty) > 0;
   const bonusInfo = n(l.freeQty) > 0 && C.printedUnit[i] > 0 && eff ? ` · מחיר ברשימה ${money(C.printedUnit[i])}, בפועל ${money(eff)}` : "";
@@ -1407,10 +1414,11 @@ async function saveDraft() {
     // products
     const calc = mergeDoc ? { ...doc, date: mergeDoc.date || doc.date, lines: [...(mergeDoc.lines || []).map(l => ({ ...l })), ...doc.lines], docDiscount: doc.docDiscount?.type && doc.docDiscount.type !== "none" ? doc.docDiscount : (mergeDoc.docDiscount || doc.docDiscount) } : doc;
     const C = computeDoc(calc, { ...sup });
-    const lines = [];
+    const lines = [], newFlags = [];
     for (let i = 0; i < calc.lines.length; i++) {
       const l = { ...calc.lines[i] };
       let pid = l.pid || cleanBarcode(l.barcode) || "n-" + uid();
+      newFlags.push(!S.products[pid]);
       const p = S.products[pid] ? { ...S.products[pid] } : { name: l.name, barcode: cleanBarcode(l.barcode), sellPrice: null, targetMargin: null, aliases: {}, packs: {} };
       delete p.id;
       p.aliases = { ...(p.aliases || {}) }; const al = new Set(p.aliases[supId] || []);
@@ -1428,6 +1436,7 @@ async function saveDraft() {
     if (isQ) rec.validUntil = doc.validUntil || "";
     const id = d.editId || mergeDoc?.id || uid();
     await put((isQ ? "quotes/" : "purchases/") + id, rec);
+    if (!isQ) { try { await afterInvoice(lines, newFlags); } catch (e) { console.error(e); } }
     const pids = [...new Set(lines.map(l => l.pid))];
     draft = newDraft(d.kind);
     lastSaved = { pids, isQ, supId };
@@ -1532,7 +1541,8 @@ function vProducts() {
   P.sort((a, b) => psort === "status" ? sev(a) - sev(b) || a.p.name.localeCompare(b.p.name, "he") : psort === "margin" ? (a.s.margin ?? 9) - (b.s.margin ?? 9) : a.p.name.localeCompare(b.p.name, "he"));
   return `${demoNote()}
   ${posMap ? vPosMap() : ""}
-  <div class="row between"><h2>מוצרים</h2><div class="row"><button class="btn" data-act="addprod">מוצר חדש</button><button class="btn" data-act="pos">ייבוא מחירים מהקופה</button><button class="btn" data-act="exportprods">ייצוא לאקסל</button></div></div>
+  ${vRegPanel()}
+  <div class="row between"><h2>מוצרים</h2><div class="row"><button class="btn" data-act="addprod">מוצר חדש</button><button class="btn" data-act="pos">ייבוא מחירים מהקופה</button><button class="btn" data-act="regcheck">בדוק עדכוני פיקוח (AI)</button><button class="btn" data-act="exportprods">ייצוא לאקסל</button></div></div>
   <div class="row"><input id="pq" placeholder="חיפוש לפי שם או ברקוד" value="${esc(pq)}" style="flex:1;min-width:180px"><select id="psort"><option value="status">לפי דחיפות</option><option value="margin" ${psort === "margin" ? "selected" : ""}>לפי רווח (נמוך קודם)</option><option value="name" ${psort === "name" ? "selected" : ""}>לפי שם</option></select></div>
   ${P.length ? `<div class="list"><div class="li head"><span>מוצר</span><span>עלות אמיתית</span><span>ספק זול ביותר</span><span>מחיר בחנות</span><span>רווח</span><span></span></div>
   ${P.map(({ p, s }) => `<div class="li click" data-act="openprod" data-pid="${esc(p.id)}"><div class="nm"><b>${esc(p.name)}</b><span class="small muted num">${esc(p.barcode || "ללא ברקוד")}</span></div>
@@ -1579,6 +1589,8 @@ function prodModal(pid) {
       <label class="fld">ברקוד<input id="mBc" inputmode="numeric" value="${esc(p.barcode || "")}" ${isNew ? "" : "disabled"}></label>
       <label class="fld">מחיר מכירה לצרכן (כולל מע"מ)<input id="mSell" type="number" step="any" value="${p.sellPrice ?? ""}"></label>
       <label class="fld">יעד רווח % (ריק = ברירת מחדל ${n(S.settings.margin)}%)<input id="mTarget" type="number" step="any" value="${p.targetMargin ?? ""}"></label>
+      <label class="fld">מוצר בפיקוח<select id="mReg"><option value="0">לא</option><option value="1" ${p.reg?.on ? "selected" : ""}>כן, המחיר נקבע לפי החוק</option></select></label>
+      <label class="fld">מחיר מקסימלי בפיקוח (כולל מע"מ)<input id="mRegMax" type="number" step="any" value="${p.reg?.max ?? ""}"></label>
       <label class="fld">קבוצה (מוצרים דומים)<input id="mGroup" list="mglist" value="${esc(p.group || "")}"><datalist id="mglist">${[...new Set(Object.values(S.products).map(x => x.group).filter(Boolean))].map(g => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
       <label class="fld">חברה / מותג<input id="mBrand" value="${esc(p.brand || "")}"></label>
       <label class="fld">גודל האריזה (ריק = מהשם${parseSize(p.name) ? ": " + (+parseSize(p.name).amount.toFixed(3)) + " " + unitLbl(parseSize(p.name).unit) : ""})<span class="row" style="gap:6px;flex-wrap:nowrap"><input id="mSize" type="number" step="any" value="${p.sizeAmount ?? ""}" style="flex:1"><select id="mSizeU"><option value="kg">ק"ג</option><option value="l" ${p.sizeUnit === "l" ? "selected" : ""}>ליטר</option></select></span></label>
@@ -1601,9 +1613,10 @@ function prodModal(pid) {
       const id = isNew ? (cleanBarcode($("#mBc", bg).value) || "n-" + uid()) : pid;
       const np = isNew ? { name, barcode: cleanBarcode($("#mBc", bg).value), aliases: {}, packs: {} } : { ...S.products[pid] }; delete np.id;
       np.name = name; const old = nn(np.sellPrice); np.sellPrice = nn($("#mSell", bg).value); np.targetMargin = nn($("#mTarget", bg).value);
-      np.group = $("#mGroup", bg).value.trim(); np.brand = $("#mBrand", bg).value.trim(); np.sizeAmount = nn($("#mSize", bg).value); np.sizeUnit = $("#mSizeU", bg).value;
+      np.reg = { on: $("#mReg", bg).value === "1", max: nn($("#mRegMax", bg).value), src: p.reg?.src || "", at: p.reg?.at || null }; np.group = $("#mGroup", bg).value.trim(); np.brand = $("#mBrand", bg).value.trim(); np.sizeAmount = nn($("#mSize", bg).value); np.sizeUnit = $("#mSizeU", bg).value;
       await put("products/" + id, np);
       if (!isNew && old !== np.sellPrice && np.sellPrice) await logChange(id, name, old, np.sellPrice);
+      if (np.sellPrice && old !== np.sellPrice) { await catSetPrice(np.barcode, np.sellPrice); await closeRemind(id); }
       close(); toast("נשמר");
     }
   });
@@ -1611,7 +1624,7 @@ function prodModal(pid) {
 async function logChange(pid, name, old, nw) { await put("pricechanges/" + uid(), { pid, name, barcode: S.products[pid]?.barcode || "", old: old ?? null, new: nw, at: Date.now(), exported: false }); }
 async function setPrice(pid, v) {
   const p = { ...S.products[pid] }; const old = nn(p.sellPrice); delete p.id; p.sellPrice = v;
-  await put("products/" + pid, p); await logChange(pid, p.name, old, v); toast(`המחיר עודכן ל-${money(v)}. זכור לעדכן גם בקופה.`);
+  await put("products/" + pid, p); await logChange(pid, p.name, old, v); await catSetPrice(p.barcode, v); await closeRemind(pid); toast(`המחיר עודכן ל-${money(v)}. זכור לעדכן גם בקופה.`);
 }
 
 
@@ -1904,6 +1917,7 @@ function vSetup() {
   <div class="grid">
     <label class="fld">מע"מ %<input id="sVat" type="number" step="any" value="${s.vat}"></label>
     <label class="fld">יעד רווח גולמי ברירת מחדל %<input id="sMargin" type="number" step="any" value="${s.margin}"></label>
+    <label class="fld">טלפון בעל החנות (לוואטסאפ מהעובדים)<input id="sOwnerPhone" dir="ltr" inputmode="tel" value="${esc(s.ownerPhone || "")}"></label>
     <label class="fld">עיגול מחיר מומלץ<select id="sRound"><option value="90" ${s.rounding === "90" ? "selected" : ""}>ל-90 אגורות (9.90)</option><option value="int" ${s.rounding === "int" ? "selected" : ""}>לשקל שלם</option><option value="10ag" ${s.rounding === "10ag" ? "selected" : ""}>ל-10 אגורות</option><option value="none" ${s.rounding === "none" ? "selected" : ""}>בלי עיגול</option></select></label>
     <label class="fld">התראה על עליית מחיר מעל %<input id="sAlert" type="number" step="any" value="${s.alertPct}"></label>
     <label class="fld">להציג ספק זול יותר מעל % חיסכון<input id="sCheap" type="number" step="any" value="${s.cheaperPct}"></label>
@@ -1967,7 +1981,7 @@ document.addEventListener("click", async e => {
       box.querySelectorAll("[data-sf]").forEach(i => s[i.dataset.sf] = i.type === "number" ? n(i.value) : i.value);
       await put("suppliers/" + b.dataset.id, s); toast("הספק נשמר"); break; }
     case "clearcorr": case "clearmap": case "clearpdf": { const s = { ...S.suppliers[b.dataset.id] }; delete s.id; if (a === "clearcorr") s.corrections = []; else if (a === "clearpdf") delete s.pdfMap; else delete s.excelMap; await put("suppliers/" + b.dataset.id, s); toast("נמחק"); break; }
-    case "savesettings": await put("settings/main", { vat: n($("#sVat").value), margin: n($("#sMargin").value), rounding: $("#sRound").value, alertPct: n($("#sAlert").value), cheaperPct: n($("#sCheap").value) }); toast("ההגדרות נשמרו"); break;
+    case "savesettings": await put("settings/main", { ownerPhone: $("#sOwnerPhone")?.value.trim() || "", vat: n($("#sVat").value), margin: n($("#sMargin").value), rounding: $("#sRound").value, alertPct: n($("#sAlert").value), cheaperPct: n($("#sCheap").value) }); toast("ההגדרות נשמרו"); break;
     case "deldemo": $("#demoConfirm").hidden = false; break;
     case "deldemoyes": {
       b.disabled = true;
@@ -1984,6 +1998,250 @@ document.addEventListener("click", async e => {
       break; }
   }
 });
+
+/* ---------- POS CATALOG (קטלוג קופה), price reminders, regulated products ---------- */
+const CAT_FIELDS = { code: ["קוד פריט", "ברקוד", "barcode", "item code", "מק\"ט", "מקט", "קוד"], desc: ["תיאור", "תאור", "description", "שם", "פריט"], cost: ["עלות", "cost"], price: ["מחיר", "price"] };
+Object.assign(FIELD_LBL, { code: "קוד פריט (ברקוד)", desc: "תיאור", cost: "עלות (לפני מע\"מ)", price: "מחיר מכירה" });
+let catMap = null, catFilter = "all", catQ = "";
+const catKey = c => String(c).trim().replace(/[\/\s.#?]/g, "_");
+const catRows = () => Object.values(S.cat).sort((a, b) => (a.o || 0) - (b.o || 0));
+const r2 = v => Math.round(v * 100) / 100;
+async function putMany(entries) {
+  if (!entries.length) return;
+  if (db.bulk) { db.bulk(entries); return; }
+  for (const [p, d] of entries) await put(p, d);
+}
+/* the short codes of weighed produce (1001...) stay manual: only real barcodes / long item codes are handled */
+const catCodeOk = c => String(c || "").replace(/\D/g, "").length >= 5;
+
+async function loadCat(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sh = wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sh], { header: 1, raw: true, defval: "" });
+    while (rows.length && rows[rows.length - 1].every(c => String(c).trim() === "")) rows.pop();
+    let headerRow = 0, best = -1;
+    rows.slice(0, 15).forEach((r, i) => { const sc = r.filter(c => Object.values(CAT_FIELDS).flat().some(k => norm(c).includes(norm(k)))).length; if (sc > best) { best = sc; headerRow = i; } });
+    catMap = { rows, headerRow, cols: guessCols(rows[headerRow] || [], CAT_FIELDS), fname: file.name, sheet: sh, ext: /\.xls$/i.test(file.name) ? "xls" : "xlsx" };
+    go("cat"); render();
+  } catch (e) { console.error(e); toast("לא הצלחתי לקרוא את הקובץ. ודא שזה אקסל או CSV."); }
+}
+async function applyCat() {
+  const st = catMap; if (!st || st.cols.code < 0) { toast("חובה לסמן איזו עמודה היא קוד הפריט"); return; }
+  const btn = document.querySelector('[data-act="catapply"]'); if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> שומר את הקטלוג…`; }
+  const head = st.rows[st.headerRow] || [];
+  const data = st.rows.slice(st.headerRow + 1);
+  const entries = []; const seen = new Set(); let o = 0;
+  // remove an older catalog first (a re-import replaces it)
+  const old = Object.keys(S.cat); for (const k of old) await del("poscat/" + k);
+  for (const r of data) {
+    if (r.every(c => String(c).trim() === "")) continue;
+    let key = catKey(r[st.cols.code] ?? ""); if (!key || seen.has(key)) key = "x" + (++o) + "-" + uid().slice(0, 4);
+    seen.add(key);
+    entries.push(["poscat/" + key, { code: String(r[st.cols.code] ?? "").trim(), r: head.map((_, i) => r[i] ?? ""), st: "", o: entries.length }]);
+  }
+  entries.push(["poscatmeta/main", { fname: st.fname, ext: st.ext, sheet: st.sheet, pre: st.rows.slice(0, st.headerRow), header: head, cols: st.cols, count: data.length, at: Date.now() }]);
+  await putMany(entries);
+  catMap = null; toast(`הקטלוג נשמר: ${data.length} שורות`); render();
+}
+/* change one cost/price cell, remember what it was, and mark the row for us (not part of the exported file) */
+function catPatch(row, patch, st) {
+  const cols = S.catMeta.cols, r = [...row.r];
+  const doc = { ...row }; delete doc.id;
+  if (patch.cost != null && cols.cost >= 0) { if (doc.was == null) doc.was = {}; if (doc.was.cost === undefined) doc.was.cost = row.r[cols.cost]; r[cols.cost] = patch.cost; }
+  if (patch.price != null && cols.price >= 0) { if (doc.was == null) doc.was = {}; if (doc.was.price === undefined) doc.was.price = row.r[cols.price]; r[cols.price] = patch.price; }
+  doc.r = r; doc.st = doc.st === "new" ? "new" : st; doc.at = Date.now();
+  return doc;
+}
+function catSetPriceEntries(code, price, acc) {
+  if (!S.catMeta || !catCodeOk(code)) return;
+  const k = catKey(code), row = acc.tmp[k] || S.cat[k]; if (!row) return;
+  const cols = S.catMeta.cols; if (cols.price < 0) return;
+  if (n(row.r[cols.price]) === n(price) && row.r[cols.price] !== "") return;
+  const doc = catPatch(row, { price }, "price"); acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc);
+}
+async function catSetPrice(code, price) { const acc = { tmp: {}, entries: new Map() }; catSetPriceEntries(code, price, acc); await putMany([...acc.entries]); }
+
+/* after an invoice is saved: costs of existing rows, new rows for new products, reminders */
+async function afterInvoice(lines, newFlags) {
+  const acc = { tmp: {}, entries: new Map() }; const rems = [];
+  const cols = S.catMeta?.cols; const header = S.catMeta?.header || [];
+  let maxO = Math.max(-1, ...Object.values(S.cat).map(r => r.o || 0));
+  lines.forEach((l, i) => {
+    const p = S.products[l.pid]; if (!p) return;
+    const code = cleanBarcode(p.barcode || l.barcode), eff = l.eff;
+    if (S.catMeta && code && catCodeOk(code) && eff) {
+      const k = catKey(code), row = acc.tmp[k] || S.cat[k], cost = r2(eff);
+      if (row) {
+        if (cols.cost >= 0 && !(Math.abs(n(row.r[cols.cost]) - cost) < 0.005 && row.r[cols.cost] !== "")) { const doc = catPatch(row, { cost }, "cost"); acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc); }
+      } else {
+        const r = header.map(() => ""); r[cols.code] = code; if (cols.desc >= 0) r[cols.desc] = p.name; if (cols.cost >= 0) r[cols.cost] = cost; if (cols.price >= 0 && p.sellPrice) r[cols.price] = n(p.sellPrice);
+        const doc = { code, r, st: "new", o: ++maxO, at: Date.now() }; acc.tmp[k] = { id: k, ...doc }; acc.entries.set("poscat/" + k, doc);
+      }
+    }
+    if (newFlags[i]) {
+      const noPrice = !p.sellPrice, noBc = !cleanBarcode(p.barcode || l.barcode);
+      if ((noPrice || noBc) && !S.remind.some(x => x.id === l.pid)) {
+        const st = stats(l.pid); const vf = vatF();
+        rems.push(["remind/" + l.pid, { pid: l.pid, name: p.name, code: p.barcode || "", cost: eff ? r2(eff) : null, costInc: eff ? r2(eff * vf) : null, rec: st.rec ?? null, reg: !!(p.reg && p.reg.on), kind: noBc ? "barcode" : "price", status: "open", due: 0, at: Date.now(), by: (window.NSYNC && NSYNC.who()) || "" }]);
+      }
+    }
+  });
+  await putMany([...acc.entries, ...rems]);
+}
+
+/* ---------- catalog screen ---------- */
+function catSummary() {
+  const rows = catRows(); const c = { all: rows.length, cost: 0, new: 0, price: 0, noprice: 0 };
+  const cols = S.catMeta.cols;
+  for (const r of rows) { if (r.st === "cost") c.cost++; else if (r.st === "new") c.new++; else if (r.st === "price") c.price++; if (r.st === "new" && cols.price >= 0 && (r.r[cols.price] === "" || r.r[cols.price] == null)) c.noprice++; }
+  return c;
+}
+const CAT_PILL = { cost: `<span class="pill warn">עלות עודכנה</span>`, new: `<span class="pill good">מוצר חדש</span>`, price: `<span class="pill info">מחיר עודכן</span>` };
+function vCat() {
+  if (catMap) { const st = catMap;
+    return `<div class="panel"><div class="row between"><h2>קטלוג הקופה: ${esc(st.fname)}</h2><button class="btn ghost" data-act="catcancel">ביטול</button></div>
+    <p class="muted">סמן איזו עמודה היא מה. כל שאר העמודות נשמרות כמו שהן וחוזרות בקובץ בדיוק באותו מבנה.</p>
+    ${mapUI(st, CAT_FIELDS)}<div class="row"><button class="btn primary" data-act="catapply">שמור את הקטלוג (${st.rows.length - st.headerRow - 1} שורות)</button></div></div>`; }
+  if (!S.catMeta) return `<div class="panel"><h2>קטלוג הקופה (אביב קופות)</h2><p class="muted">מעלים פעם אחת את קובץ הקטלוג שאביב שלחו. מאותו רגע הקובץ נשמר כאן בדיוק כמו שהוא, עלויות מתעדכנות אוטומטית מכל חשבונית, מוצרים חדשים מתווספים, ושום דבר לא נמחק. בסוף מורידים קובץ מעודכן ומביאים לאביב.</p><div class="row"><button class="btn primary" data-act="catload">העלה את קובץ הקטלוג</button></div></div>`;
+  const m = S.catMeta, c = catSummary();
+  let rows = catRows();
+  if (catFilter === "changed") rows = rows.filter(r => r.st); else if (["cost", "new", "price"].includes(catFilter)) rows = rows.filter(r => r.st === catFilter);
+  else if (catFilter === "noprice") rows = rows.filter(r => r.st === "new" && (r.r[m.cols.price] === "" || r.r[m.cols.price] == null));
+  const q = norm(catQ); if (q) rows = rows.filter(r => norm(r.r.join(" ")).includes(q));
+  const shown = rows.slice(0, 300), cl = m.cols, chip = (k, t, cnt) => `<button class="btn small ${catFilter === k ? "primary" : ""}" data-act="catfilter" data-k="${k}">${t}${cnt != null ? ` (${cnt})` : ""}</button>`;
+  return `<div class="panel"><div class="row between"><h2>קטלוג הקופה</h2><div class="row"><button class="btn primary" data-act="catexport">ייצא קובץ לאביב</button></div></div>
+    <p class="small muted">${esc(m.fname)} · ${c.all} שורות. הסימונים כאן הם רק בשבילנו, הקובץ שמורידים נקי וזהה במבנה לקובץ המקורי. שורות שלא השתנו נשארות בדיוק כפי שהן.</p>
+    <div class="row" style="flex-wrap:wrap">${chip("all", "הכל", c.all)}${chip("changed", "השתנו", c.cost + c.new + c.price)}${chip("cost", "עלות עודכנה", c.cost)}${chip("new", "חדשים", c.new)}${chip("noprice", "חדשים בלי מחיר מכירה", c.noprice)}${chip("price", "מחיר עודכן", c.price)}</div>
+    <label class="fld">חיפוש<input id="catQ" value="${esc(catQ)}" placeholder="קוד או תיאור"></label>
+    <div class="tbl"><table><thead><tr><th>סימון</th><th>קוד</th><th>תיאור</th><th>עלות</th><th>מחיר מכירה</th></tr></thead><tbody>${shown.map(r => `<tr><td>${CAT_PILL[r.st] || ""}</td><td class="num">${esc(r.code)}</td><td>${esc(cl.desc >= 0 ? r.r[cl.desc] : "")}</td><td class="num">${cl.cost >= 0 ? esc(r.r[cl.cost]) : ""}${r.st === "cost" && r.was?.cost !== undefined && r.was.cost !== "" ? ` <span class="small muted">(היה ${esc(r.was.cost)})</span>` : ""}</td><td class="num">${cl.price >= 0 ? esc(r.r[cl.price]) : ""}${r.st === "price" && r.was?.price !== undefined && r.was.price !== "" ? ` <span class="small muted">(היה ${esc(r.was.price)})</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
+    ${rows.length > shown.length ? `<p class="small muted">מוצגות ${shown.length} מתוך ${rows.length}. השתמש בחיפוש או במסנן.</p>` : ""}
+    <div class="row"><button class="btn" data-act="catreset">אפס את הסימונים (אחרי שאביב עדכנו)</button><button class="btn ghost danger" data-act="catreplace">החלף קטלוג</button></div></div>`;
+}
+after.cat = () => {
+  if (catMap) bindMap(catMap, CAT_FIELDS);
+  const q = $("#catQ"); if (q) q.oninput = () => { catQ = q.value; const pos = q.selectionStart; render(); const q2 = $("#catQ"); if (q2) { q2.focus(); q2.setSelectionRange(pos, pos); } };
+};
+async function catExport() {
+  const m = S.catMeta, rows = catRows();
+  const aoa = [...(m.pre || []), m.header, ...rows.map(r => r.r)];
+  if (!downloads) { toast("הורדת קבצים לא זמינה בתצוגה הזו"); return; }
+  const ws = XLSX.utils.aoa_to_sheet(aoa); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, m.sheet || "Sheet1");
+  const ext = m.ext === "xls" ? "xls" : "xlsx";
+  const data = XLSX.write(wb, { type: "array", bookType: ext === "xls" ? "biff8" : "xlsx" });
+  const base = String(m.fname || "catalog").replace(/\.[^.]+$/, "");
+  try { await downloads.save({ filename: `${base}-מעודכן-${today()}.${ext}`, data: new Uint8Array(data) }); toast("הקובץ ירד. הסימונים לא נכללים בו."); } catch (e) { if (e?.code !== "declined") toast("ההורדה נכשלה"); }
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return; const a = b.dataset.act;
+  if (a === "catload") { const i = document.createElement("input"); i.type = "file"; i.accept = ".xls,.xlsx,.csv"; i.onchange = () => i.files[0] && loadCat(i.files[0]); i.click(); }
+  else if (a === "catcancel") { catMap = null; render(); }
+  else if (a === "catapply") await applyCat();
+  else if (a === "catfilter") { catFilter = b.dataset.k; render(); }
+  else if (a === "catexport") await catExport();
+  else if (a === "catreset") { const ents = catRows().filter(r => r.st).map(r => { const d = { ...r }; delete d.id; d.st = ""; delete d.was; return ["poscat/" + r.id, d]; }); await putMany(ents); toast("הסימונים אופסו"); }
+  else if (a === "catreplace") { if (confirm("להחליף את הקטלוג בקובץ חדש? הסימונים והעדכונים שבקטלוג הנוכחי יוחלפו.")) { const i = document.createElement("input"); i.type = "file"; i.accept = ".xls,.xlsx,.csv"; i.onchange = () => i.files[0] && loadCat(i.files[0]); i.click(); } }
+  else if (a === "regcheck") regCheck();
+});
+
+/* ---------- price reminders (new product without a sell price) ---------- */
+const remLocal = () => { try { return JSON.parse(localStorage.getItem("neeman-rem-local") || "{}"); } catch (e) { return {}; } };
+const remLocalSet = (id, t) => { try { const o = remLocal(); o[id] = t; localStorage.setItem("neeman-rem-local", JSON.stringify(o)); } catch (e) {} };
+function remDue() { const now = Date.now(), loc = remLocal(); return S.remind.filter(r => r.status === "open" && (r.due || 0) <= now && (loc[r.id] || 0) <= now); }
+function remLine(r) { return `"${r.name}": עולה לנו ${r.cost != null ? money(r.cost) + " לפני מע\"מ (" + money(r.costInc ?? r.cost * vatF()) + " כולל מע\"מ)" : "(עלות לא ידועה)"}${r.rec ? ", מחיר מומלץ " + money(r.rec) : ""}${r.reg ? ", בפיקוח" : ""}${r.kind === "barcode" ? ", חסר ברקוד" : ""}`; }
+function waOwnerText(list) {
+  list = Array.isArray(list) ? list : [list];
+  if (list.length === 1) { const r = list[0]; return `המוצר "${r.name}" צריך לקבל מחיר מכירה בקופה. איזה מחיר אתה רוצה?\nהמוצר עולה לנו ${r.cost != null ? money(r.cost) + " לפני מע\"מ (" + money(r.costInc ?? r.cost * vatF()) + " כולל מע\"מ)" : "(עלות לא ידועה)"}.${r.rec ? "\nמחיר מומלץ לפי יעד הרווח: " + money(r.rec) + "." : ""}${r.reg ? "\nזה מוצר בפיקוח." : ""}${r.kind === "barcode" ? "\nבנוסף, חסר לו ברקוד במערכת." : ""}`; }
+  return `המוצרים הבאים צריכים לקבל מחיר מכירה בקופה. איזה מחיר אתה רוצה לכל אחד?\n` + list.slice(0, 20).map((r, i) => `${i + 1}. ${remLine(r)}`).join("\n") + (list.length > 20 ? `\nועוד ${list.length - 20} מוצרים.` : "");
+}
+let remOpen = false;
+function checkRemind() {
+  if (remOpen || !S.ready || document.querySelector(".modal-bg")) return;
+  const due = remDue(); if (!due.length) return;
+  showRemind(due);
+}
+function showRemind(list) {
+  remOpen = true; const worker = isWorker(); const vf = vatF();
+  const rows = list.slice(0, 12).map(r => { const st = S.products[r.pid] ? stats(r.pid) : null; r = { ...r, rec: st?.rec ?? r.rec, reg: r.reg || !!st?.regMax }; return r; });
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true" data-rem>
+    <div class="row between"><h2>${list.length === 1 ? "צריך להגדיר מחיר מכירה בקופה" : list.length + " מוצרים צריכים מחיר מכירה בקופה"}</h2></div>
+    <div class="stack" style="max-height:55vh;overflow:auto">${rows.map(r => `<div class="line" data-rrow="${esc(r.id)}"><b>${esc(r.name)}</b>
+      <p class="small muted">${r.cost != null ? `עולה לנו ${money(r.cost)} לפני מע"מ (${money(r.costInc ?? r.cost * vf)} כולל מע"מ).` : ""}${r.rec ? ` מחיר מומלץ: <b>${money(r.rec)}</b>${r.reg ? " (בפיקוח: המחיר המקסימלי)" : ""}.` : ""}${r.kind === "barcode" ? " חסר ברקוד, צריך להוסיף אותו בקופה." : ""}</p>
+      ${worker ? "" : `<div class="row"><input type="number" step="any" data-rprice="${esc(r.id)}" value="${r.rec || ""}" placeholder="מחיר מכירה כולל מע&quot;מ" style="max-width:150px"><button class="btn small primary" data-rdone="${esc(r.id)}">בוצע</button></div>`}</div>`).join("")}</div>
+    ${list.length > rows.length ? `<p class="small muted">ועוד ${list.length - rows.length} מוצרים. יופיעו אחרי שתסיים את אלה.</p>` : ""}
+    ${worker ? `<div class="row"><button class="btn primary" data-rwa>שלח לבעל החנות בוואטסאפ</button><button class="btn" data-rlater>סגור, יופיע שוב בעוד שעה</button></div><p class="small muted">ההודעה מוכנה עם שמות המוצרים, העלות והמחיר המומלץ. בעל החנות מגדיר את המחיר.</p>`
+      : `<div class="row"><button class="btn" data-r1h>תזכיר לי על כולם בעוד שעה</button><button class="btn" data-rtom>מחר בבוקר</button></div><p class="small muted">"בוצע" אחרי שהגדרת את המחיר בקופה. אם הקלדת מחיר כאן, הוא נשמר גם במוצר ובקטלוג.</p>`}
+  </div>`;
+  document.body.append(bg);
+  const close = () => { bg.remove(); remOpen = false; setTimeout(checkRemind, 400); };
+  const upd = async (r, patch) => { const d = { ...r, ...patch }; delete d.id; await put("remind/" + r.id, d); };
+  bg.addEventListener("click", async e => {
+    const done = e.target.closest("[data-rdone]");
+    if (done) {
+      const id = done.dataset.rdone, r = S.remind.find(x => x.id === id); if (!r) return;
+      const price = nn(bg.querySelector(`[data-rprice="${CSS.escape(id)}"]`)?.value);
+      if (price && S.products[r.pid]) { const p = { ...S.products[r.pid] }; const old = nn(p.sellPrice); delete p.id; p.sellPrice = price; await put("products/" + r.pid, p); if (old !== price) await logChange(r.pid, p.name, old, price); await catSetPrice(p.barcode, price); }
+      await upd(r, { status: "done", doneAt: Date.now() });
+      bg.querySelector(`[data-rrow="${CSS.escape(id)}"]`)?.remove();
+      if (!bg.querySelector("[data-rrow]")) { toast("סומן כבוצע"); close(); }
+    } else if (e.target.closest("[data-r1h]")) { for (const r of list) await upd(r, { due: Date.now() + 3600e3 }); close(); }
+    else if (e.target.closest("[data-rtom]")) { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(8, 0, 0, 0); for (const r of list) await upd(r, { due: t.getTime() }); close(); }
+    else if (e.target.closest("[data-rwa]")) { window.open("https://wa.me/" + waPhone(S.settings.ownerPhone) + "?text=" + encodeURIComponent(waOwnerText(list)), "_blank", "noopener"); for (const r of list) remLocalSet(r.id, Date.now() + 3600e3); close(); }
+    else if (e.target.closest("[data-rlater]")) { for (const r of list) remLocalSet(r.id, Date.now() + 3600e3); close(); }
+  });
+}
+setInterval(checkRemind, 10000);
+window.NREM = { check: checkRemind, due: remDue, waText: waOwnerText };
+
+/* ---------- regulated products (מוצרים בפיקוח) ---------- */
+const regMaxOf = p => (p && p.reg && p.reg.on && nn(p.reg.max)) ? n(p.reg.max) : null;
+let regState = null;
+async function aiWeb(prompt) {
+  const key = (() => { try { return localStorage.getItem("neeman-api-key") || ""; } catch (e) { return ""; } })();
+  return sample.json(prompt, { web: true });
+}
+async function regCheck() {
+  if (regState?.busy) return;
+  const P = Object.values(S.products).slice(0, 150).map(p => ({ id: p.id, name: p.name, barcode: p.barcode || "", regulated: !!(p.reg && p.reg.on), max: p.reg?.max ?? null }));
+  if (!P.length) { toast("אין מוצרים לבדיקה"); return; }
+  regState = { busy: true }; render();
+  const prompt = `You help an Israeli grocery store owner. Use web search on OFFICIAL Israeli government sources (gov.il, Ministry of Economy and Industry, the list of price-controlled products "מוצרים בפיקוח" and its latest price update notice) to find which of the products below are CURRENTLY price-controlled in Israel and what the current maximum consumer price is (including VAT).
+Rules: mark regulated=true ONLY when an official source confirms that this kind of product is price-controlled; if unsure, regulated=false and explain in "note". maxPrice is the maximum consumer price in NIS including VAT for the product's size as written in its name (null if the size does not match the regulated item). Give the official source URL and the effective date.
+Products (JSON): ${JSON.stringify(P)}
+Reply with ONLY this JSON: {"asOf":"YYYY-MM-DD"|null,"items":[{"id":string,"regulated":boolean,"maxPrice":number|null,"source":string,"note":string}],"notes":string}`;
+  try {
+    const res = await sample.json(prompt, { web: true });
+    const items = (res.items || []).filter(x => S.products[x.id]).map(x => { const p = S.products[x.id], was = regMaxOf(p); return { ...x, was, name: p.name, wasOn: !!(p.reg && p.reg.on) }; });
+    const changes = items.filter(x => (x.regulated && (!x.wasOn || (x.maxPrice != null && x.maxPrice !== x.was))) || (!x.regulated && x.wasOn));
+    regState = { busy: false, changes, asOf: res.asOf || null, notes: res.notes || "", checked: items.length };
+  } catch (e) { regState = { busy: false, err: e?.code === "no_key" ? "כדי לבדוק עדכוני פיקוח צריך מפתח AI: בלשונית הגדרות, או מחובר לחשבון החנות עם הקריאה דרך השרת." : "הבדיקה נכשלה (" + (e?.code || e?.message || "") + ")" }; }
+  render();
+}
+function vRegPanel() {
+  const s = regState; if (!s) return "";
+  if (s.busy) return `<div class="panel"><p><span class="spin"></span> בודק באתרי הממשלה, לוקח כדקה…</p></div>`;
+  if (s.err) return `<div class="panel warnbox"><b>${esc(s.err)}</b><div class="row"><button class="btn" data-act="regclose">סגור</button></div></div>`;
+  if (!s.changes.length) return `<div class="panel"><b>לא נמצאו שינויים בפיקוח</b> (נבדקו ${s.checked} מוצרים${s.asOf ? ", נכון ל-" + esc(s.asOf) : ""}).<div class="row"><button class="btn" data-act="regclose">סגור</button></div></div>`;
+  return `<div class="panel"><h3>עדכוני פיקוח לאישור${s.asOf ? " (נכון ל-" + esc(s.asOf) + ")" : ""}</h3><p class="small muted">התוצאות מבוססות על חיפוש ב-AI באתרים רשמיים. בדוק מול המקור לפני אישור. שום דבר לא משתנה עד שתאשר.</p>
+  ${s.changes.map((x, i) => `<label class="line" style="display:block"><input type="checkbox" data-regc="${i}" checked> <b>${esc(x.name)}</b>: ${x.regulated ? (x.wasOn ? `המחיר המקסימלי ישתנה מ-${money(x.was)} ל-${money(x.maxPrice)}` : `מוצר בפיקוח חדש, מחיר מקסימלי ${x.maxPrice != null ? money(x.maxPrice) : "לא ידוע"}`) : "כבר לא בפיקוח"}${x.source ? ` <a href="${esc(x.source)}" target="_blank" rel="noopener">מקור</a>` : ""}${x.note ? `<div class="small muted">${esc(x.note)}</div>` : ""}</label>`).join("")}
+  ${s.notes ? `<p class="small muted">${esc(s.notes)}</p>` : ""}
+  <div class="row"><button class="btn primary" data-act="regapply">אשר ועדכן</button><button class="btn" data-act="regclose">ביטול</button></div></div>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return; const a = b.dataset.act;
+  if (a === "regclose") { regState = null; render(); }
+  else if (a === "regapply") {
+    const ents = [];
+    document.querySelectorAll("[data-regc]").forEach(c => { if (!c.checked) return; const x = regState.changes[+c.dataset.regc]; const p = { ...S.products[x.id] }; delete p.id;
+      p.reg = x.regulated ? { on: true, max: x.maxPrice, src: x.source || "", at: Date.now() } : { on: false, max: p.reg?.max ?? null, src: p.reg?.src || "", at: Date.now() };
+      ents.push(["products/" + x.id, p]); });
+    await putMany(ents); regState = null; toast(`עודכנו ${ents.length} מוצרים`); render();
+  }
+});
+
+async function closeRemind(pid) { const r = S.remind.find(x => x.id === pid && x.status === "open"); if (!r) return; const d = { ...r }; delete d.id; d.status = "done"; d.doneAt = Date.now(); await put("remind/" + pid, d); }
 
 /* ---------- boot ---------- */
 (async function boot() {

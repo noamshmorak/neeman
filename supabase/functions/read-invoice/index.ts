@@ -45,7 +45,8 @@ Deno.serve(async (req) => {
     const cap = Number(Deno.env.get("DAILY_PAGES") || 150);
     const { data: use } = await admin.from("ai_usage").select("pages").eq("store_id", storeId).eq("day", day).maybeSingle();
     const used = use?.pages || 0;
-    const cost = Math.max(1, images.length);
+    const web = b?.web === true;
+    const cost = Math.max(1, images.length) + (web ? 2 : 0);
     if (used + cost > cap) return json({ error: "daily limit", used, cap }, 429);
     await admin.from("ai_usage").upsert({ store_id: storeId, day, pages: used + cost });
 
@@ -57,6 +58,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5",
         max_tokens: 12000,
+        ...(web ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }] } : {}),
         messages: [{ role: "user", content: [
           ...images.map((data) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } })),
           { type: "text", text: prompt },
