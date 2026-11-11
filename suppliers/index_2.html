@@ -1863,7 +1863,11 @@ async function scCam() {
       const tick = async () => { if (stopped) return; try { const r = await det.detect(video); if (r && r[0]) return found(r[0].rawValue); } catch (e) {} setTimeout(tick, 200); };
       tick();
     } else {
-      if (!window.ZXing) await new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"; sc.onload = ok; sc.onerror = () => no(new Error("zxing")); document.head.append(sc); });
+      if (!window.ZXing) { /* the library sits next to the app (zxing.min.js); the CDN is only a fallback */
+        const load = src => new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = () => no(new Error("zxing")); document.head.append(sc); });
+        try { await load(new URL("zxing.min.js", location.href).href); } catch (e) {}
+        if (!window.ZXing) await load("https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js");
+      }
       reader = new ZXing.BrowserMultiFormatReader();
       reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, video, (res) => { if (res) found(res.getText()); });
     }
