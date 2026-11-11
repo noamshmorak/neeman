@@ -56,7 +56,8 @@ function userRow(u,label){
 async function load(){
   msg("טוען…");const d=await api({action:"overview"});msg("");
   const t=d.stores.reduce((a,s)=>({docs:a.docs+s.docs,ai:a.ai+s.ai_today}),{docs:0,ai:0});
-  $("#app").innerHTML=`<div class="grid"><div><b>${d.stores.length}</b>חנויות</div><div><b>${t.docs}</b>מסמכים בענן</div><div><b>${t.ai}</b>עמודי AI היום</div></div>`+
+  $("#app").innerHTML=`<div class="card"><b>פתיחת חנות חדשה</b><p class="muted" style="margin:4px 0 8px">החנות תהיה נפרדת לגמרי: היא תראה רק את הנתונים שלה. בעל החנות ייכנס עם האימייל והסיסמה שתקליד כאן.</p>
+  <form id="ns" class="row"><input name="name" placeholder="שם החנות" required><input name="slug" dir="ltr" placeholder="קוד חנות באנגלית (למשל: shalom)" pattern="[a-z0-9][a-z0-9-]{2,39}" required><input name="email" type="email" dir="ltr" placeholder="אימייל בעל החנות" required autocomplete="off"><input name="password" type="password" dir="ltr" placeholder="סיסמה (8 תווים ומעלה)" minlength="8" required autocomplete="new-password"><button class="primary" type="submit">פתח חנות</button></form></div><div class="grid"><div><b>${d.stores.length}</b>חנויות</div><div><b>${t.docs}</b>מסמכים בענן</div><div><b>${t.ai}</b>עמודי AI היום</div></div>`+
   d.stores.map(s=>`<div class="card" data-s="${esc(s.id)}"><div class="row between"><div><b>${esc(s.name)}</b> <span class="pill" dir="ltr">${esc(s.slug)}</span> <span class="pill">${esc(s.plan)}</span></div>
   <button data-a="workers">עובדים (${s.workers})</button></div>
   <div class="grid"><div><b>${s.docs}</b>מסמכים</div><div><b>${s.ai_today}</b>AI היום</div><div><b>${fmt(s.created_at).split(",")[0]}</b>נפתחה</div></div>
@@ -76,6 +77,10 @@ document.addEventListener("submit",async e=>{
   const f=e.target;if(f.id==="f"){e.preventDefault();msg("מתחבר…");
     const {error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
     if(error){msg("אימייל או סיסמה לא נכונים",true);return}start();return}
+  if(f.id==="ns"){e.preventDefault();const v=Object.fromEntries(new FormData(f));
+    if(!confirm("לפתוח חנות חדשה "+v.name+" עם הבעלים "+v.email+"?"))return;
+    const btn=f.querySelector("button");btn.disabled=true;
+    try{await api({action:"createstore",...v});msg("החנות נפתחה. מסור לבעל החנות את האימייל והסיסמה בצורה בטוחה, והוא נכנס בלשונית בעל החנות.");await load()}catch(err){msg(err.message,true);btn.disabled=false}return}
   if(f.dataset.a==="pass"){e.preventDefault();const u=f.closest("[data-u]").dataset.u,inp=f.querySelector("input");
     if(inp.value.length<8){msg("הסיסמה חייבת להיות לפחות 8 תווים",true);return}
     if(!confirm("לשנות את הסיסמה של המשתמש הזה?"))return;

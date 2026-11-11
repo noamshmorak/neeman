@@ -80,6 +80,23 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (b.action === "createstore") {
+      const name = String(b.name || "").trim(), slug = String(b.slug || "").trim().toLowerCase();
+      const email = String(b.email || "").trim().toLowerCase(), pw = String(b.password || "");
+      if (name.length < 2 || name.length > 80) return json({ error: "שם החנות צריך להיות 2 עד 80 תווים" }, 400);
+      if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return json({ error: "קוד חנות: 3 עד 40 תווים באנגלית קטנה, ספרות ומקף" }, 400);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "אימייל לא תקין" }, 400);
+      if (pw.length < 8) return json({ error: "הסיסמה חייבת להיות לפחות 8 תווים" }, 400);
+      const { data: taken } = await admin.from("stores").select("id").eq("slug", slug).maybeSingle();
+      if (taken) return json({ error: "קוד החנות כבר תפוס" }, 400);
+      const { data: created, error: ce } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true });
+      if (ce || !created?.user) return json({ error: ce?.message || "יצירת המשתמש נכשלה" }, 400);
+      const { error: se } = await admin.from("stores").insert({ owner: created.user.id, slug, name });
+      if (se) { await admin.auth.admin.deleteUser(created.user.id); return json({ error: "פתיחת החנות נכשלה: " + se.message }, 400); }
+      await log("createstore", slug);
+      return json({ ok: true, slug });
+    }
+
     return json({ error: "unknown action" }, 400);
   } catch (e) {
     return json({ error: "server", detail: String((e as Error)?.message || e).slice(0, 200) }, 500);
