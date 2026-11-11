@@ -296,6 +296,8 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
       try{ document.body.classList.toggle("worker",sync.role==="worker"); if(sync.slug) localStorage.setItem(SLUGKEY,sync.slug); }catch(e){}
       // demo rows never go to the cloud; local data from before sync existed is queued as the oldest version
       for(const p of Object.keys(store)){ if(store[p]&&store[p].demo){ delete store[p]; delete queue[p]; delete meta[p]; } else if(!meta[p]){ meta[p]=1; queue[p]={d:store[p],ts:1}; } }
+      // a different cloud store than last time (or first run of this version): send everything this device holds, so nothing stays only here
+      try{ const SIDK="neeman-sup-sid"; if(localStorage.getItem(SIDK)!==st.id){ for(const p of Object.keys(store)){ if(store[p]&&!store[p].demo){ meta[p]=meta[p]||1; queue[p]={d:store[p],ts:meta[p]}; } } lastPull=""; sv(LKEY,""); localStorage.setItem(SIDK,st.id); } }catch(e){}
       saveSync(); persist(); emit();
       sync.state="ok"; try{ localStorage.setItem("neeman-authed","1"); }catch(e){} hideGate(); paint(); cycle();
     }catch(e){ sync.state="err"; sync.msg=String((e&&e.message)||e).slice(0,140); paint(); }
