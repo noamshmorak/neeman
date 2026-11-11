@@ -262,12 +262,33 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
     sync.busy=false; paint();
     if(sync.again){ sync.again=false; kick(); }
   }
+
+  const authedBefore=()=>{ try{ return localStorage.getItem("neeman-authed")==="1"; }catch(e){ return false; } };
+  const devHost=()=>/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  function hideGate(){ document.getElementById("gate")?.remove(); }
+  function showGate(){
+    if(devHost()||document.getElementById("gate")) return;
+    const g=document.createElement("div"); g.id="gate";
+    g.style.cssText="position:fixed;inset:0;z-index:9999;background:var(--bg);overflow:auto;display:flex;justify-content:center;padding:max(24px,env(safe-area-inset-top,0px)) 16px";
+    g.innerHTML=`<div style="width:100%;max-width:380px;margin:auto"><div class="panel" style="padding:20px"><h2 style="margin:0 0 4px">נאמן ספקים</h2><p class="muted" style="margin:0 0 14px">צריך להתחבר כדי להשתמש במערכת.</p>
+      <div class="row" style="margin-bottom:12px"><button class="btn primary" data-g="w" style="flex:1">עובד</button><button class="btn" data-g="o" style="flex:1">בעל החנות</button></div>
+      <form id="gW" class="stack"><label class="fld">קוד חנות<input id="gSlug" dir="ltr" autocapitalize="none" value="${(()=>{try{return (localStorage.getItem(SLUGKEY)||"").replace(/[^\w-]/g,"")}catch(e){return ""}})()}"></label><label class="fld">שם משתמש<input id="gUser" dir="ltr" autocapitalize="none" autocomplete="username"></label><label class="fld">סיסמה<input id="gPass" type="password" dir="ltr" autocomplete="current-password"></label><button class="btn primary" type="submit">כניסה</button></form>
+      <form id="gO" class="stack" hidden><label class="fld">אימייל<input id="gMail" type="email" dir="ltr" autocomplete="username"></label><label class="fld">סיסמה<input id="gPw" type="password" dir="ltr" autocomplete="current-password"></label><button class="btn primary" type="submit">כניסה</button></form>
+      <p id="gErr" class="small" style="color:var(--bad,#c0392b);min-height:1.2em;margin:10px 0 0"></p></div></div>`;
+    document.body.append(g);
+    const tab=w=>{ g.querySelector("#gW").hidden=!w; g.querySelector("#gO").hidden=w; g.querySelectorAll("[data-g]").forEach(b=>b.classList.toggle("primary",(b.dataset.g==="w")===w)); };
+    g.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>tab(b.dataset.g==="w")); tab(true);
+    const err=m=>{ g.querySelector("#gErr").textContent=m; };
+    const run=async(f,btn)=>{ err(""); btn.disabled=true; try{ await f(); if(sync.sid){ try{ if(sync.role==="worker") location.hash="#inbox"; }catch(e){} location.reload(); } else { err(sync.msg||"ההתחברות לא הושלמה"); btn.disabled=false; } }catch(e){ err(/invalid/i.test(e.message||"")?"פרטי הכניסה לא נכונים":"שגיאה: "+String(e.message||e).slice(0,100)); btn.disabled=false; } };
+    g.querySelector("#gW").onsubmit=e=>{ e.preventDefault(); const sl=g.querySelector("#gSlug").value.trim(),us=g.querySelector("#gUser").value.trim(),pw=g.querySelector("#gPass").value; if(!sl||!us||!pw){ err("צריך קוד חנות, שם משתמש וסיסמה"); return; } run(()=>signInWorker(sl,us,pw),e.submitter||e.target.querySelector("button[type=submit]")); };
+    g.querySelector("#gO").onsubmit=e=>{ e.preventDefault(); const em=g.querySelector("#gMail").value.trim(),pw=g.querySelector("#gPw").value; if(!em||!pw){ err("צריך אימייל וסיסמה"); return; } run(()=>signIn(em,pw),e.submitter||e.target.querySelector("button[type=submit]")); };
+  }
   async function connect(){
-    if(!window.supabase){ sync.state="out"; paint(); return; }
+    if(!window.supabase){ sync.state="out"; paint(); if(!authedBefore()) showGate(); return; }
     if(!sync.sb) sync.sb=window.supabase.createClient(CFG.url,CFG.key);
     try{
       const {data:{session}}=await sync.sb.auth.getSession();
-      if(!session){ sync.state="out"; sync.sid=null; paint(); return; }
+      if(!session){ sync.state="out"; sync.sid=null; paint(); showGate(); return; }
       const {data:st,error}=await sync.sb.rpc("my_store");
       if(error) throw error;
       if(!st){ sync.state="err"; sync.msg="אין חנות לחשבון הזה, או שהעובד הושבת."; sync.sid=null; paint(); return; }
@@ -276,7 +297,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
       // demo rows never go to the cloud; local data from before sync existed is queued as the oldest version
       for(const p of Object.keys(store)){ if(store[p]&&store[p].demo){ delete store[p]; delete queue[p]; delete meta[p]; } else if(!meta[p]){ meta[p]=1; queue[p]={d:store[p],ts:1}; } }
       saveSync(); persist(); emit();
-      sync.state="ok"; paint(); cycle();
+      sync.state="ok"; try{ localStorage.setItem("neeman-authed","1"); }catch(e){} hideGate(); paint(); cycle();
     }catch(e){ sync.state="err"; sync.msg=String((e&&e.message)||e).slice(0,140); paint(); }
   }
   async function signIn(email,pass){
@@ -290,7 +311,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
   const who=()=>sync.role==="worker"?sync.workerName:"";
   const isWorker=()=>sync.role==="worker";
   async function wApi(body){ const {data,error}=await sync.sb.functions.invoke("manage-workers",{body}); if(error){ let m=error.message; try{ const j=await error.context.json(); if(j&&j.error) m=j.error; }catch(e){} throw new Error(m); } if(data&&data.error) throw new Error(data.error); return data; }
-  async function signOut(){ try{ if(sync.sb) await sync.sb.auth.signOut(); }catch(e){} sync.sid=null; sync.role=""; try{ document.body.classList.remove("worker"); }catch(e){} sync.state="out"; paint(); }
+  async function signOut(){ try{ localStorage.removeItem("neeman-authed"); }catch(e){} try{ if(sync.sb) await sync.sb.auth.signOut(); }catch(e){} sync.sid=null; sync.role=""; try{ document.body.classList.remove("worker"); }catch(e){} sync.state="out"; paint(); }
   setInterval(()=>{ if(!document.hidden&&navigator.onLine) cycle(); },25000);
   addEventListener("online",()=>cycle());
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) cycle(); });
