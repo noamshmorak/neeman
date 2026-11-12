@@ -58,9 +58,12 @@ async function load(){
   const t=d.stores.reduce((a,s)=>({docs:a.docs+s.docs,ai:a.ai+s.ai_today}),{docs:0,ai:0});
   $("#app").innerHTML=`<div class="card"><b>פתיחת חנות חדשה</b><p class="muted" style="margin:4px 0 8px">החנות תהיה נפרדת לגמרי: היא תראה רק את הנתונים שלה. בעל החנות ייכנס עם האימייל והסיסמה שתקליד כאן.</p>
   <form id="ns" class="row"><input name="name" placeholder="שם החנות" required><input name="slug" dir="ltr" placeholder="קוד חנות באנגלית (למשל: shalom)" pattern="[a-z0-9][a-z0-9-]{2,39}" required><input name="email" type="email" dir="ltr" placeholder="אימייל בעל החנות" required autocomplete="off"><input name="password" type="password" dir="ltr" placeholder="סיסמה (8 תווים ומעלה)" minlength="8" required autocomplete="new-password"><button class="primary" type="submit">פתח חנות</button></form></div><div class="grid"><div><b>${d.stores.length}</b>חנויות</div><div><b>${t.docs}</b>מסמכים בענן</div><div><b>${t.ai}</b>עמודי AI היום</div></div>`+
-  d.stores.map(s=>`<div class="card" data-s="${esc(s.id)}"><div class="row between"><div><b>${esc(s.name)}</b> <span class="pill" dir="ltr">${esc(s.slug)}</span> <span class="pill">${esc(s.plan)}</span></div>
+  d.stores.map(s=>`<div class="card" data-s="${esc(s.id)}"><div class="row between"><div><b>${esc(s.name)}</b> <span class="pill" dir="ltr">${esc(s.slug)}</span> <span class="pill ${s.plan==="paused"?"bad":""}">${esc({trial:"ניסיון",active:"מנוי פעיל",paused:"מושהה"}[s.plan]||s.plan)}</span></div>
   <button data-a="workers">עובדים (${s.workers})</button></div>
   <div class="grid"><div><b>${s.docs}</b>מסמכים</div><div><b>${s.ai_today}</b>AI היום</div><div><b>${fmt(s.created_at).split(",")[0]}</b>נפתחה</div></div>
+  <form class="row" data-a="plan" style="margin:8px 0"><select name="plan"><option value="trial"${s.plan==="trial"?" selected":""}>ניסיון</option><option value="active"${s.plan==="active"?" selected":""}>מנוי פעיל</option><option value="paused"${s.plan==="paused"?" selected":""}>מושהה (חוסם שליחה)</option></select>
+  <input type="date" name="renews" value="${esc(s.sub_renews||"")}" title="תאריך חידוש"><button type="submit">שמירת מנוי</button>
+  <span class="muted">וואטסאפ: ${s.wa_connected?"מחובר":"לא מחובר"} · מצב ${esc({off:"כבוי",dry:"ניסוי",test:"בדיקה",live:"פעיל"}[s.wa_mode]||s.wa_mode)} · ${s.wa_sent_30d} הודעות ב-30 יום</span></form>
   ${userRow({user_id:s.owner,...s.owner_info},"בעל החנות")}<div class="workers"></div></div>`).join("");
 }
 document.addEventListener("click",async e=>{
@@ -81,6 +84,9 @@ document.addEventListener("submit",async e=>{
     if(!confirm("לפתוח חנות חדשה "+v.name+" עם הבעלים "+v.email+"?"))return;
     const btn=f.querySelector("button");btn.disabled=true;
     try{await api({action:"createstore",...v});msg("החנות נפתחה. מסור לבעל החנות את האימייל והסיסמה בצורה בטוחה, והוא נכנס בלשונית בעל החנות.");await load()}catch(err){msg(err.message,true);btn.disabled=false}return}
+  if(f.dataset.a==="plan"){e.preventDefault();const sid=f.closest("[data-s]").dataset.s,v=Object.fromEntries(new FormData(f));
+    if(v.plan==="paused"&&!confirm("להשהות את המנוי? שליחת הודעות תיחסם והשליחה האוטומטית תיכבה. שום נתון לא יימחק."))return;
+    try{await api({action:"setplan",store_id:sid,plan:v.plan,renews:v.renews||null});msg("המנוי עודכן");await load()}catch(err){msg(err.message,true)}return}
   if(f.dataset.a==="pass"){e.preventDefault();const u=f.closest("[data-u]").dataset.u,inp=f.querySelector("input");
     if(inp.value.length<8){msg("הסיסמה חייבת להיות לפחות 8 תווים",true);return}
     if(!confirm("לשנות את הסיסמה של המשתמש הזה?"))return;

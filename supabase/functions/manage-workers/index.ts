@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     };
 
     if (b.action === "list") {
-      const { data, error } = await admin.from("store_members").select("user_id,username,name,active,created_at").eq("store_id", store.id).order("created_at");
+      const { data, error } = await admin.from("store_members").select("user_id,username,name,active,can_reminders,created_at").eq("store_id", store.id).order("created_at");
       if (error) throw error;
       return json({ slug: store.slug, workers: data });
     }
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
         email: workerEmail(store.slug, username), password, email_confirm: true, user_metadata: { worker: true, name },
       });
       if (e1 || !created?.user) return json({ error: "יצירת המשתמש נכשלה: " + (e1?.message || "") }, 400);
-      const { error: e2 } = await admin.from("store_members").insert({ user_id: created.user.id, store_id: store.id, username, name });
+      const { error: e2 } = await admin.from("store_members").insert({ user_id: created.user.id, store_id: store.id, username, name, can_reminders: b.can_reminders === true });
       if (e2) { await admin.auth.admin.deleteUser(created.user.id); return json({ error: "השמירה נכשלה" }, 500); }
       return json({ ok: true });
     }
@@ -64,6 +64,12 @@ Deno.serve(async (req) => {
       if (!(await own(String(b.user_id)))) return json({ error: "not found" }, 404);
       const { error } = await admin.auth.admin.updateUserById(String(b.user_id), { password });
       if (error) return json({ error: error.message }, 400);
+      return json({ ok: true });
+    }
+    if (b.action === "setreminders") {
+      if (!(await own(String(b.user_id)))) return json({ error: "not found" }, 404);
+      const { error } = await admin.from("store_members").update({ can_reminders: !!b.can_reminders }).eq("user_id", String(b.user_id));
+      if (error) throw error;
       return json({ ok: true });
     }
     if (b.action === "setactive") {

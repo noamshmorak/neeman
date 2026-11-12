@@ -578,7 +578,7 @@ async function loadAll(store){
   const P = group(pu.data), R = group(re.data), X = group(cr.data);
   S = {
     store: {id:store.id, slug:store.slug, name:store.name, whatsapp:store.whatsapp||'', pin:store.pin||'1234', autoKiosk:store.auto_kiosk!==false,
-            templates:{...defaultTemplates(), ...(store.templates||{})}, template:TPL_FALLBACK, video_path:store.video_path, video_orig_path:store.video_orig_path},
+            plan:store.plan||'trial', subRenews:store.sub_renews||null, waMode:store.wa_mode||'off', waConnected:!!store.wa_connected, waTestPhone:store.wa_test_phone||'', templates:{...defaultTemplates(), ...(store.templates||{})}, template:TPL_FALLBACK, video_path:store.video_path, video_orig_path:store.video_orig_path},
     products: pr.data.map(p => ({id:p.id, name:p.name, kind:p.kind, kg:Number(p.kg), days:p.days||null, price:Number(p.price), barcode:p.barcode||'', active:p.active})),
     rules: ru.data.map(r => ({id:r.id, name:r.name, pets:r.pets||[], every:r.every, template:r.template})),
     customers: cu.data.map(c => ({
@@ -593,6 +593,7 @@ async function loadAll(store){
     replyLog: ev.data.map(e => ({date:e.date, name:e.customer_name||'', t:e.text})),
     posLog: (S && S.posLog) || []
   };
+  S.role = window.__role || 'owner';
   S.products = S.products.filter(p => p.active !== false || S.customers.some(c => c.productId===p.id));
   lastEventAt = ev.data[0]?.created_at || '';
   B = rowsOf(S);
@@ -1189,6 +1190,7 @@ views.today = () => {
     <div class="kpi"><span>חזרו אחרי תזכורת · 30 יום</span><b class="num">${ret.length}</b></div>
     <div class="kpi gold"><span>הכנסה שהמערכת החזירה</span><b class="num">${money(rev)}</b></div>
   </div>
+  ${waBannerHTML()}
   ${watchState === 'needs' ? `<div class="notice" style="margin-bottom:14px">הייבוא האוטומטי מהקופה מחכה לאישור (הדפדפן מבקש אחרי הפעלה מחדש). <button class="btn sm primary" data-act="watchresume">אישור</button></div>` : ''}
   ${ordersHTML()}
   <section class="panel">
@@ -1287,7 +1289,7 @@ views.report = () => {
   </section>`;
 };
 
-views.setup = () => `<section class="panel" id="watchPanel"><h2>ייבוא אוטומטי מהקופה</h2>${watchHTML()}</section>
+views.setup = () => '<div id="ownerPanels"></div>' + `<section class="panel" id="watchPanel"><h2>ייבוא אוטומטי מהקופה</h2>${watchHTML()}</section>
   <section class="panel"><h2>קישור ההרשמה של החנות</h2>
     <p class="sub">זה הקישור שה-QR פותח. אפשר גם לשים אותו באתר, באינסטגרם או בסטטוס.</p>
     <div class="linkbox" style="margin-top:12px"><code>${esc(joinUrl())}</code><button class="btn" type="button" data-act="copylink">העתקה</button></div></section>
@@ -2405,19 +2407,162 @@ async function rcvAct(a, t){
 }
 
 /* router */
+/* ================= v9: מנוי, עובדים, וואטסאפ API ================= */
+const FN_URL = () => window.LSN_CONFIG.SUPABASE_URL + '/functions/v1/';
+async function callFn(name, body){
+  const {data:{session}} = await sb.auth.getSession();
+  const r = await fetch(FN_URL()+name, {method:'POST', headers:{'Content-Type':'application/json', apikey:window.LSN_CONFIG.SUPABASE_ANON_KEY, Authorization:'Bearer '+(session?.access_token||'')}, body:JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'שגיאה ('+r.status+')');
+  return j;
+}
+const isWorker = () => S && S.role === 'worker';
+const planOk = () => S && S.store.plan !== 'paused';
+const PLAN_LABEL = {trial:'תקופת ניסיון', active:'מנוי פעיל', paused:'מנוי מושהה'};
+const MODE_LABEL = {off:'כבוי (שליחה ידנית מהוואטסאפ של החנות)', dry:'ניסוי: רושם ביומן בלי לשלוח', test:'בדיקה: שולח הודעות אמיתיות רק למספר הבדיקה שלך', live:'פעיל: שולח ללקוחות'};
+const WA_TPL_EXAMPLE = 'היי {{1}}, כאן {{2}}.\nלפי החישוב שלנו ל{{3}} נשאר אוכל {{4}}.\nלהכין לך שוב {{5}}?\n(להפסקת תזכורות השב/י "הסר")';
+
+/* the five template parameters, in this order: name, store, pet, days, product */
+function waParams(c){
+  const s = status(c), p = prod(c.productId);
+  return [c.name.split(' ')[0], S.store.name, c.petName || PETS[c.pet].the.slice(1), daysPhrase(s.left), p.name+' '+p.kg+' ק"ג'];
+}
+function sendableNow(){
+  return S.customers.map(c => ({c, s:status(c)})).filter(x => needsAction(x.s) && !pendingImport(x.c));
+}
+function waBannerHTML(){
+  if (S.store.plan === 'paused') return '<div class="notice" style="margin-bottom:14px;border-color:var(--warn)"><b>המנוי מושהה.</b> אפשר לראות לקוחות, אבל שליחת הודעות חסומה. לחידוש פנה אל נאמן.</div>';
+  const m = S.store.waMode;
+  if (m === 'off' || !m) return '';
+  const list = sendableNow(), n = list.length;
+  return `<div class="notice" style="margin-bottom:14px"><b>שליחה אוטומטית: ${m==='live'?'פעילה':m==='test'?'מצב בדיקה (נשלח רק למספר הבדיקה)':'מצב ניסוי (לא נשלח כלום)'}.</b>
+    ${n ? `${n} לקוחות מחכים להודעה.` : 'אין כרגע למי לשלוח.'}
+    ${n ? `<button class="btn sm primary" data-ra="sendall">שלח לכולם (${n})</button>` : ''}
+    <a href="#" data-ra="showlog">יומן שליחות</a></div>`;
+}
+async function sendBatch(rows){
+  if (!rows.length) return;
+  const mode = S.store.waMode;
+  const txt = mode==='live' ? 'לשלוח הודעת וואטסאפ ל-'+rows.length+' לקוחות עכשיו?' : mode==='test' ? 'לשלוח '+rows.length+' הודעות בדיקה למספר הבדיקה שלך?' : 'להריץ ניסוי על '+rows.length+' לקוחות? לא יישלח כלום.';
+  if (!confirm(txt)) return;
+  toast('שולח…');
+  try {
+    const items = rows.slice(0, 200).map(x => ({id:x.c.id, params:waParams(x.c)}));
+    const r = await callFn('wa-api', {action:'send', items});
+    const parts = [];
+    if (r.sent) parts.push(r.sent+' נשלחו'); if (r.test) parts.push(r.test+' נשלחו למספר הבדיקה'); if (r.dry) parts.push(r.dry+' נרשמו בניסוי');
+    if (r.failed) parts.push(r.failed+' נכשלו'); if (r.skipped) parts.push(r.skipped+' דולגו');
+    alert((parts.join(', ') || 'לא נשלח כלום') + (r.details?.length ? '\n\n' + r.details.slice(0,5).join('\n') : ''));
+    const {data:store} = await sb.from('stores').select('*').eq('id', S.store.id).single(); await loadAll(store); route();
+  } catch(e){ alert('השליחה לא הצליחה: ' + e.message); }
+}
+async function showWaLog(){
+  const {data, error} = await sb.from('wa_log').select('name,phone,status,detail,at').eq('store_id', S.store.id).order('at', {ascending:false}).limit(100);
+  if (error){ toast('לא הצלחתי לטעון את היומן'); return; }
+  const L = {sent:'נשלח', test:'בדיקה', dry:'ניסוי', failed:'נכשל', skipped:'דולג'};
+  const rows = (data||[]).map(r => `<tr><td>${esc(new Date(r.at).toLocaleString('he-IL'))}</td><td>${esc(r.name||'')}</td><td>${esc(L[r.status]||r.status)}</td><td>${esc(r.detail||'')}</td></tr>`).join('');
+  const w = document.createElement('div'); w.className = 'overlay-bg'; w.style.cssText = 'position:fixed;inset:0;background:#0008;z-index:99;display:flex;align-items:center;justify-content:center;padding:14px';
+  w.innerHTML = `<div style="background:var(--card,#fff);max-width:760px;width:100%;max-height:85vh;overflow:auto;border-radius:14px;padding:18px"><div class="row"><h2>יומן שליחות (100 אחרונות)</h2><span class="spacer"></span><button class="btn" data-ra="closelog">סגור</button></div>
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem"><thead><tr><th>מתי</th><th>לקוח</th><th>סטטוס</th><th>פרט</th></tr></thead><tbody>${rows || '<tr><td colspan="4">עוד לא נשלח כלום</td></tr>'}</tbody></table></div>`;
+  w.id = 'waLogW'; document.body.appendChild(w);
+}
+
+/* ---- owner panels in the settings screen ---- */
+async function ownerPanels(){
+  const box = $('#ownerPanels'); if (!box) return;
+  const st = S.store, ren = st.subRenews ? new Date(st.subRenews).toLocaleDateString('he-IL') : '';
+  box.innerHTML = `
+  <section class="panel"><h2>המנוי שלך</h2>
+    <p class="sub"><b>${esc(PLAN_LABEL[st.plan]||st.plan)}</b>${ren ? ' · חידוש: '+esc(ren) : ''}. ההודעות בוואטסאפ משולמות ישירות לחברת Meta מהחשבון של החנות.</p></section>
+  <section class="panel"><h2>עובדים</h2>
+    <p class="sub">עובד נכנס עם שם משתמש וסיסמה משלו. עובד עם גישה לתזכורות יכול לרשום מכירה, לראות לקוחות ולשלוח תזכורת. הוא לא רואה הגדרות, וואטסאפ או עובדים אחרים.</p>
+    <div id="wkList" class="list"><div class="empty">טוען…</div></div>
+    <form id="wkForm" class="form" style="margin-top:12px">
+      <div class="grid2"><div class="field"><label for="wkName">שם העובד</label><input id="wkName" required></div>
+      <div class="field"><label for="wkUser">שם משתמש (אנגלית וספרות)</label><input id="wkUser" dir="ltr" required pattern="[a-z0-9]{2,20}" autocapitalize="off"></div></div>
+      <div class="grid2"><div class="field"><label for="wkPass">סיסמה (6 תווים לפחות)</label><input id="wkPass" type="text" dir="ltr" minlength="6" required autocomplete="off"></div>
+      <label class="check" style="align-self:end"><input type="checkbox" id="wkRem" checked><span>גישה לתזכורות</span></label></div>
+      <div class="row"><button class="btn primary" type="submit">הוספת עובד</button><span class="err" id="wkErr" role="alert"></span></div>
+    </form></section>
+  <section class="panel"><h2>וואטסאפ API</h2>
+    <p class="sub">${st.waConnected ? 'מחובר. הטוקן שמור בשרת ולא מוצג.' : 'לא מחובר.'} את הפרטים מקבלים ב-Meta for Developers, באפליקציה מסוג Business, תחת WhatsApp, API Setup. הפרטים נשמרים בשרת בלבד.</p>
+    <form id="waForm" class="form">
+      <div class="grid2"><div class="field"><label for="waPid">Phone number ID</label><input id="waPid" class="num" dir="ltr" inputmode="numeric" autocomplete="off"></div>
+      <div class="field"><label for="waTok">טוקן גישה ${st.waConnected ? '(השאר ריק כדי לא לשנות)' : ''}</label><input id="waTok" type="password" dir="ltr" autocomplete="new-password"></div></div>
+      <div class="grid2"><div class="field"><label for="waTpl">שם התבנית המאושרת</label><input id="waTpl" dir="ltr" placeholder="food_reminder"></div>
+      <div class="field"><label for="waLang">שפת התבנית</label><input id="waLang" dir="ltr" value="he"></div></div>
+      <details class="more"><summary>איזו תבנית להגיש ל-Meta?</summary><p class="sub">קטגוריה: Utility. שפה: עברית. גוף ההודעה בדיוק כך (5 משתנים בסדר הזה: שם, חנות, חיה, ימים, מוצר):</p><pre style="white-space:pre-wrap;background:#f4f1ea;padding:10px;border-radius:8px;direction:rtl">${esc(WA_TPL_EXAMPLE)}</pre></details>
+      <div class="row"><button class="btn primary" type="submit">שמירת פרטי API</button>${st.waConnected ? '<button class="btn" type="button" data-ra="waclear">ניתוק</button>' : ''}<span class="err" id="waErr" role="alert"></span></div>
+    </form>
+    <form id="modeForm" class="form" style="margin-top:16px">
+      <div class="grid2"><div class="field"><label for="waMode">מצב שליחה</label><select id="waMode">${Object.entries(MODE_LABEL).map(([k,v]) => `<option value="${k}" ${st.waMode===k?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
+      <div class="field"><label for="waTest">מספר בדיקה (הטלפון שלך)</label><input id="waTest" class="num" inputmode="tel" value="${esc(st.waTestPhone||'')}"></div></div>
+      <div class="row"><button class="btn primary" type="submit">שמירת מצב</button><button class="btn" type="button" data-ra="showlog">יומן שליחות</button><span class="err" id="modeErr" role="alert"></span></div>
+    </form></section>`;
+  loadWorkers();
+  $('#wkForm').addEventListener('submit', async e => {
+    e.preventDefault(); $('#wkErr').textContent = '';
+    try { await callFn('manage-workers', {action:'create', name:$('#wkName').value, username:$('#wkUser').value, password:$('#wkPass').value, can_reminders:$('#wkRem').checked}); e.target.reset(); $('#wkRem').checked = true; toast('העובד נוסף'); loadWorkers(); }
+    catch(er){ $('#wkErr').textContent = er.message; }
+  });
+  $('#waForm').addEventListener('submit', async e => {
+    e.preventDefault(); $('#waErr').textContent = '';
+    try { await callFn('wa-api', {action:'save', phone_number_id:$('#waPid').value, access_token:$('#waTok').value, template_name:$('#waTpl').value, template_lang:$('#waLang').value});
+      $('#waTok').value = ''; S.store.waConnected = true; toast('נשמר'); ownerPanels(); }
+    catch(er){ $('#waErr').textContent = er.message; }
+  });
+  $('#modeForm').addEventListener('submit', async e => {
+    e.preventDefault(); $('#modeErr').textContent = '';
+    try { await callFn('wa-api', {action:'setmode', mode:$('#waMode').value, test_phone:$('#waTest').value});
+      S.store.waMode = $('#waMode').value; if (normPhone($('#waTest').value).length===10) S.store.waTestPhone = normPhone($('#waTest').value); toast('נשמר'); }
+    catch(er){ $('#modeErr').textContent = er.message; }
+  });
+}
+async function loadWorkers(){
+  const el = $('#wkList'); if (!el) return;
+  try {
+    const r = await callFn('manage-workers', {action:'list'});
+    window.__wk = r.workers;
+    el.innerHTML = r.workers.length ? r.workers.map(w => `<div class="row" style="padding:8px 0;border-bottom:1px solid #0001">
+      <div><b>${esc(w.name)}</b> <span class="muted" dir="ltr">${esc(w.username)}</span>${w.active ? '' : ' <span class="err">מושבת</span>'}</div><span class="spacer"></span>
+      <label class="check"><input type="checkbox" data-ra="wkrem" data-id="${w.user_id}" ${w.can_reminders?'checked':''}><span>תזכורות</span></label>
+      <button class="btn sm" data-ra="wkpass" data-id="${w.user_id}">סיסמה חדשה</button>
+      <button class="btn sm" data-ra="wkact" data-id="${w.user_id}">${w.active ? 'השבתה' : 'הפעלה'}</button></div>`).join('') : '<div class="empty">אין עובדים עדיין</div>';
+  } catch(e){ el.innerHTML = '<div class="empty">'+esc(e.message)+'</div>'; }
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-ra]'); if (!t) return;
+  const a = t.dataset.ra, id = t.dataset.id;
+  try {
+    if (a==='sendall'){ e.preventDefault(); return sendBatch(sendableNow()); }
+    if (a==='showlog'){ e.preventDefault(); return showWaLog(); }
+    if (a==='closelog'){ $('#waLogW')?.remove(); return; }
+    if (a==='waclear'){ if (!confirm('לנתק את הוואטסאפ? השליחה האוטומטית תיכבה.')) return; await callFn('wa-api', {action:'clear'}); S.store.waConnected = false; S.store.waMode = 'off'; ownerPanels(); return; }
+    if (a==='wkpass'){ const p = prompt('סיסמה חדשה לעובד (6 תווים לפחות):'); if (!p) return; await callFn('manage-workers', {action:'setpass', user_id:id, password:p}); toast('הסיסמה הוחלפה'); return; }
+    if (a==='wkact'){ const w = (window.__wk||[]).find(x => x.user_id===id); await callFn('manage-workers', {action:'setactive', user_id:id, active:!w.active}); return loadWorkers(); }
+  } catch(er){ alert(er.message); }
+});
+document.addEventListener('change', async e => {
+  const t = e.target.closest('[data-ra="wkrem"]'); if (!t) return;
+  try { await callFn('manage-workers', {action:'setreminders', user_id:t.dataset.id, can_reminders:t.checked}); toast('נשמר'); } catch(er){ alert(er.message); t.checked = !t.checked; }
+});
+
 const SHELL_VIEWS = ['today','sale','customers','receive','report','setup'];
 function route(){
   if (!S) return;
   const h = (location.hash||'#today').slice(1);
   closeDrawer();
   $('#storeLabel').textContent = S.store.name;
+  if (h==='kiosk' && isWorker()){ location.hash = '#today'; return; }
   if (h==='kiosk'){
     $('#shell').hidden = true; $('#full').hidden = false;
     renderKiosk();
     window.scrollTo(0,0); return;
   }
   $('#full').hidden = true; $('#full').innerHTML=''; $('#shell').hidden = false;
-  const v = SHELL_VIEWS.includes(h) ? h : 'today';
+  const WK_OFF = ['setup','receive','report'];
+  const v = SHELL_VIEWS.includes(h) && !(isWorker() && WK_OFF.includes(h)) ? h : 'today';
+  document.querySelectorAll('.tabs a').forEach(a => { const hr = a.getAttribute('href'); a.hidden = isWorker() && (WK_OFF.map(x=>'#'+x).includes(hr) || hr==='#kiosk'); });
   document.querySelectorAll('.tabs a').forEach(a => a.getAttribute('href')==='#'+v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   $('#view').innerHTML = views[v]();
   if (v==='sale'){
@@ -2438,6 +2583,7 @@ function route(){
     });
   }
   if (v==='setup'){
+    ownerPanels();
     $('#bcTest').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); const d = e.target.value.replace(/\D/g,''); e.target.value=''; if (d.length>=4) handleScan(d); } });
     attachVideo($('#vidPrev'));
     $('#vidFile').addEventListener('change', e => saveVideoFile(e.target.files[0]));
@@ -2505,9 +2651,11 @@ function renderAuth(mode='login', msg=''){
     <div class="row">${LOGO_SVG}<div><h1>נאמן</h1><span class="eyebrow">מערכת שימור לקוחות לחנויות חיות</span></div></div>
     ${mode==='newpass' ? '' : `<div class="seg" role="group" aria-label="כניסה או הרשמה">
       <button type="button" data-auth="login" aria-pressed="${mode==='login'}">כניסה</button>
+      <button type="button" data-auth="worker" aria-pressed="${mode==='worker'}">עובד</button>
       <button type="button" data-auth="signup" aria-pressed="${mode==='signup'}">חנות חדשה</button></div>`}
     <form class="form" id="authForm" novalidate>
-      ${mode==='newpass' ? '' : '<div class="field"><label for="aEmail">אימייל</label><input id="aEmail" type="email" autocomplete="email" dir="ltr" required></div>'}
+      ${mode==='worker' ? '<div class="field"><label for="aSlug">קוד החנות</label><input id="aSlug" dir="ltr" autocapitalize="off" required></div><div class="field"><label for="aUser">שם משתמש</label><input id="aUser" dir="ltr" autocapitalize="off" required></div>' : ''}
+      ${(mode==='newpass'||mode==='worker') ? '' : '<div class="field"><label for="aEmail">אימייל</label><input id="aEmail" type="email" autocomplete="email" dir="ltr" required></div>'}
       ${mode==='forgot' ? '' : `<div class="field"><label for="aPass">${mode==='newpass'?'סיסמה חדשה':'סיסמה'}</label><input id="aPass" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" dir="ltr" minlength="8" required>${mode!=='login'?'<span class="hint">לפחות 8 תווים</span>':''}</div>`}
       <div class="err" id="aErr" role="alert"></div>
       <div class="ok-msg" role="status">${esc(msg)}</div>
@@ -2519,12 +2667,13 @@ function renderAuth(mode='login', msg=''){
   $('#authForm').onsubmit = async e => {
     e.preventDefault();
     const err = $('#aErr'); err.textContent = '';
-    const email = $('#aEmail')?.value.trim(), pass = $('#aPass')?.value;
-    if (mode!=='newpass' && !/^\S+@\S+\.\S+$/.test(email||'')){ err.textContent = 'כתובת האימייל לא תקינה.'; return; }
-    if (mode!=='forgot' && (pass||'').length < 8){ err.textContent = 'הסיסמה צריכה להיות לפחות 8 תווים.'; return; }
+    let email = $('#aEmail')?.value.trim(); const pass = $('#aPass')?.value;
+    if (mode==='worker'){ email = ($('#aSlug').value.trim().toLowerCase())+'.'+($('#aUser').value.trim().toLowerCase())+'@workers.neeman-app.com'; if ((pass||'').length < 6){ err.textContent = 'הסיסמה קצרה מדי.'; return; } }
+    else if (mode!=='newpass' && !/^\S+@\S+\.\S+$/.test(email||'')){ err.textContent = 'כתובת האימייל לא תקינה.'; return; }
+    if (mode!=='forgot' && mode!=='worker' && (pass||'').length < 8){ err.textContent = 'הסיסמה צריכה להיות לפחות 8 תווים.'; return; }
     const btn = e.submitter; if (btn) btn.disabled = true;
     try {
-      if (mode==='login'){
+      if (mode==='login' || mode==='worker'){
         const {error} = await sb.auth.signInWithPassword({email, password:pass});
         if (error) throw error;
       } else if (mode==='signup'){
@@ -2589,12 +2738,18 @@ async function boot(){
   window.__email = session.user.email;
   showFull('<div class="loading">טוען את החנות…</div>');
   try {
+    const {data:me} = await sb.rpc('my_store');
+    if (me && me.role==='worker' && !me.can_reminders){
+      showFull('<div class="auth"><div class="auth-card"><h1>אין לך גישה לתזכורות</h1><p class="sub">בעל החנות לא נתן לך הרשאה למסך הזה. אפשר לצאת ולהיכנס לנאמן ספקים.</p><button class="btn" onclick="sb.auth.signOut()">יציאה</button></div></div>'); return;
+    }
     const {data:store, error} = await sb.from('stores').select('*').maybeSingle();
     if (error) throw error;
     if (!store) return renderOnboarding();
+    window.__role = me?.role === 'worker' ? 'worker' : 'owner';
     await loadAll(store);
+    S.role = window.__role;
     watchInit();
-    if (!location.hash) location.hash = S.store.autoKiosk ? '#kiosk' : '#today';
+    if (!location.hash) location.hash = (S.store.autoKiosk && !isWorker()) ? '#kiosk' : '#today';
     route();
   } catch(e){
     console.error(e);

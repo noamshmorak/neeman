@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     };
 
     if (b.action === "overview") {
-      const { data: stores, error } = await admin.from("stores").select("id,slug,name,owner,plan,created_at").order("created_at");
+      const { data: stores, error } = await admin.from("stores").select("id,slug,name,owner,plan,sub_renews,wa_mode,wa_connected,created_at").order("created_at");
       if (error) throw error;
       const out = [];
       for (const s of stores || []) {
@@ -43,7 +43,9 @@ Deno.serve(async (req) => {
           admin.from("ai_usage").select("pages").eq("store_id", s.id).eq("day", day).maybeSingle(),
           info(s.owner),
         ]);
-        out.push({ ...s, docs: docs.count || 0, workers: workers.count || 0, ai_today: usage.data?.pages || 0, owner_info: owner });
+        const since = new Date(Date.now() - 30 * 86400000).toISOString();
+        const sent = await admin.from("wa_log").select("id", { count: "exact", head: true }).eq("store_id", s.id).eq("status", "sent").gte("at", since);
+        out.push({ ...s, wa_sent_30d: sent.count || 0, docs: docs.count || 0, workers: workers.count || 0, ai_today: usage.data?.pages || 0, owner_info: owner });
       }
       return json({ stores: out, day });
     }
@@ -77,6 +79,18 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 400);
       await admin.from("store_members").update({ active: on }).eq("user_id", uid);
       await log(on ? "activate" : "deactivate", uid);
+      return json({ ok: true });
+    }
+
+    if (b.action === "setplan") {
+      const sid = String(b.store_id || ""), plan = String(b.plan || "");
+      if (!["trial", "active", "paused"].includes(plan)) return json({ error: "סטטוס לא תקין" }, 400);
+      const renews = b.renews ? String(b.renews) : null;
+      if (renews && !/^\d{4}-\d{2}-\d{2}$/.test(renews)) return json({ error: "תאריך לא תקין" }, 400);
+      const { error } = await admin.from("stores").update({ plan, sub_renews: renews }).eq("id", sid);
+      if (error) return json({ error: error.message }, 400);
+      if (plan === "paused") await admin.from("stores").update({ wa_mode: "off" }).eq("id", sid);
+      await log("setplan:" + plan, sid);
       return json({ ok: true });
     }
 
