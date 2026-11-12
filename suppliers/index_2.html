@@ -940,7 +940,7 @@ const FREE = (() => {
   }
   async function blobToCanvas(blob) { const b = await createImageBitmap(blob); const k = Math.min(1, 2000 / Math.max(b.width, b.height)); const c = document.createElement("canvas"); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); c.getContext("2d").drawImage(b, 0, 0, c.width, c.height); return c; }
   /* ---- straighten the photo before reading: sideways pages and a tilted page ---- */
-  function inkGrid(c, maxSide = 640) {
+  function inkGrid(c, maxSide = 420) {
     const k = Math.min(1, maxSide / Math.max(c.width, c.height)), w = Math.max(8, Math.round(c.width * k)), h = Math.max(8, Math.round(c.height * k));
     const t = document.createElement("canvas"); t.width = w; t.height = h; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, w, h);
     const d = x.getImageData(0, 0, w, h).data, g = new Float32Array(w * h);
@@ -1009,12 +1009,12 @@ const FREE = (() => {
         step && step(blobs.length > 1 ? `קורא בחינם עמוד ${i + 1} מתוך ${blobs.length}…` : "קורא את המסמך בחינם, בטלפון…");
         let cv = await blobToCanvas(blobs[i]), low = "";
         try { const st = await straighten(cv, w); cv = st.canvas; low = st.low; window.NORIENT_LAST = { q: st.q, tilt: st.tilt }; } catch (e) { console.error(e); }
-        if (i === 0) resHead({ quick: low.split(/\r?\n/).filter(x => x.trim()).slice(0, 14).join("\n"), hires: async () => { const hr = await w.recognize(prep(cropTop(cv, 0.3))); return hr.data.text || ""; } });
+        if (i === 0) resHead({ quick: low });
         const r = await w.recognize(prep(cv)); text += r.data.text + "\n";
       }
-      resHead({ quick: "", hires: async () => "" }); return text;
+      resHead({ quick: "" }); return text;
     })();
-    full.catch(() => resHead({ quick: "", hires: async () => "" }));
+    full.catch(() => resHead({ quick: "" }));
     return { head, full };
   }
   async function ocr(blobs, step) { return start(blobs, step).full; }
@@ -1129,7 +1129,7 @@ const FREE = (() => {
     trim(T.names); trim(T.codes);
     return T;
   }
-  return { ocr, start, warm, read, learn, header, whichSupplier, split, sim };
+  return { ocr, start, warm, read, learn, header, whichSupplier, split, sim, lev, heb };
 })();
 
 let readCtl = null;
@@ -1158,11 +1158,10 @@ async function readDoc() {
     if (hd === null) why = "slow";
     else {
       try {
-        const who = txt => { const hh = FREE.header(txt.split(/\r?\n/)); return { h: hh, g: chosen || FREE.whichSupplier(hh, sups) || (hh.top?.[0] ? supByName(hh.top[0]) : null) }; };
-        let r1 = who(hd.quick); if (!r1.g) { const r2 = who(await hd.hires()); if (r2.g || !(r1.h.top || []).length) r1 = r2; }
-        const h = r1.h; seen = h.top || [];
-        guess = r1.g;
-        draft.supGuess = guess ? guess.id : ""; draft.supSeen = seen.slice(0, 2);
+        const found = chosen ? { sup: chosen, how: "chosen" } : identifySupplier(hd.quick);
+        guess = found.sup; draft.lowText = hd.quick;
+        seen = [];
+        draft.supGuess = guess ? guess.id : "";
         if (!guess) why = "new";
         else if (!guess.ocrTpl?.layout) { why = "notpl"; if (!draft.supplierId) draft.supplierId = guess.id; }
         else {
@@ -1279,6 +1278,39 @@ function supByProducts(lines) {
   const [id, c] = arr[0], second = arr[1]?.[1] || 0;
   return S.suppliers[id] && c >= 2 && c > second && c >= Math.max(2, (lines || []).length * 0.4) ? S.suppliers[id] : null;
 }
+/* who wrote this page? The name is not always at the top (sometimes it is only a logo, or sits at the bottom), so look at the WHOLE page:
+   1. the company number (ח.פ / עוסק) anywhere in the text, 2. the supplier's name or a spelling we learned, on any line, 3. products we bought from this supplier before. */
+const digitRuns = text => { const out = new Set(); for (const m of String(text || "").matchAll(/\d[\d\- ]{6,14}\d/g)) { const d = m[0].replace(/\D/g, ""); if (d.length >= 8 && d.length <= 9) out.add(d); } return [...out]; };
+function identifySupplier(text) {
+  const sups = Object.values(S.suppliers); if (!sups.length || !text) return { sup: null };
+  const runs = digitRuns(text);
+  for (const s of sups) {
+    const t = String(s.taxId || "").replace(/\D/g, ""); if (t.length < 8) continue;
+    const seenT = s.ocrTpl?.taxSeen || [];
+    if (runs.some(d => d === t || seenT.includes(d) || (d.length === t.length && FREE.lev(d, t) <= 1))) return { sup: s, how: "taxid" };
+  }
+  const lines = String(text).split(/\r?\n/).map(l => coName(l)).filter(l => FREE.heb(l).length >= 4);
+  let best = null, sc = 0, tie = false;
+  for (const s of sups) for (const ref of [s.name, ...(s.ocrTpl?.heads || [])]) {
+    const r = coName(ref); if (FREE.heb(r).length < 4) continue;
+    for (const l of lines) {
+      let v = 0;
+      if (l.includes(r)) v = r.length >= 5 ? 0.95 : 0.85;
+      else if (l.length <= r.length + 6) { const k = FREE.sim(r, l); if (k >= 0.8) v = k; }
+      if (v > sc + 0.001) { sc = v; best = s; tie = false; } else if (v >= sc - 0.001 && v > 0 && best && best.id !== s.id) tie = true;
+    }
+  }
+  if (best && sc >= 0.8 && !tie) return { sup: best, how: "name" };
+  const bcs = []; for (const m of String(text).matchAll(/\b\d{12,13}\b/g)) bcs.push(m[0]);
+  const bp = supByProducts(bcs.map(b => ({ barcode: b })));
+  return bp ? { sup: bp, how: "products" } : { sup: null };
+}
+/* the lines of the page that look most like this name (used to learn how a supplier's name is misread) */
+function bestLines(name, text) {
+  const nm = coName(name); if (FREE.heb(nm).length < 3) return [];
+  return String(text || "").split(/\r?\n/).map(l => coName(l)).filter(l => FREE.heb(l).length >= 3 && l.length <= nm.length + 10)
+    .map(l => [l, FREE.sim(nm, l)]).filter(x => x[1] >= 0.55 && x[0] !== nm).sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0]);
+}
 function findSupplier(res) {
   if (draft.supplierId && S.suppliers[draft.supplierId]) return draft.supplierId;
   const tax = String(res.supplierTaxId || "").replace(/\D/g, "");
@@ -1313,8 +1345,8 @@ function startReview(res, source) {
   const supId = findSupplier(res || {});
   draft.supMiss = null;
   if (source === "ai" && draft.supGuess !== undefined) {
-    const g = draft.supGuess, seen = (draft.supSeen || []).join(" / ");
-    if (supId && supId !== g) draft.supMiss = { actual: supId, guessed: g, seen: draft.supSeen || [] };
+    const g = draft.supGuess;
+    if (supId && supId !== g) draft.supMiss = { actual: supId, guessed: g, seen: bestLines(S.suppliers[supId].name, draft.lowText || draft.ocrText) };
     draft.supGuess = undefined;
   }
   const lines = (res?.lines || []).map(l => {
@@ -1328,7 +1360,7 @@ function startReview(res, source) {
   if (supId && draft.supHow === "products") fixes.push(`זיהיתי את הספק כ-${S.suppliers[supId].name} לפי המוצרים שקנית ממנו בעבר (השם ${res?.supplierName || ""} לא הופיע אצלך). אם זה לא נכון, בחר ספק אחר למעלה.`);
   if (supId && draft.supHow === "name" && norm(res?.supplierName) !== norm(S.suppliers[supId].name)) fixes.push(`הספק במסמך נקרא "${res?.supplierName}" וחוברה לספק ${S.suppliers[supId].name}. אם זה לא נכון, בחר ספק אחר.`);
   draft.supHow = "";
-  if (draft.supMiss) { const A = S.suppliers[draft.supMiss.actual], Gs = S.suppliers[draft.supMiss.guessed]; fixes.push(Gs ? `הקריאה החינמית זיהתה בטעות את הספק כ-${Gs.name}, אבל זה ${A.name}. הכיתוב בראש המסמך שהיא קראה: "${draft.supMiss.seen.join(" / ")}". אחרי השמירה היא תלמד שהכיתוב הזה הוא ${A.name}.` : `הקריאה החינמית לא זיהתה את הספק${draft.supMiss.seen.length ? ` (בראש המסמך היא קראה: "${draft.supMiss.seen.join(" / ")}")` : ""}, אבל זה לא ספק חדש: זה ${A.name}. אחרי השמירה היא תלמד שהכיתוב הזה הוא ${A.name}, ובפעם הבאה תזהה אותו לבד.`); }
+  if (draft.supMiss) { const A = S.suppliers[draft.supMiss.actual], Gs = S.suppliers[draft.supMiss.guessed], sn = draft.supMiss.seen; fixes.push((Gs ? `הקריאה החינמית זיהתה בטעות את הספק כ-${Gs.name}, אבל זה ${A.name}.` : `הקריאה החינמית לא זיהתה את הספק, אבל זה לא ספק חדש: זה ${A.name}.`) + (sn.length ? ` את שם הספק היא קראה כך: "${sn.join(" / ")}".` : " היא לא מצאה את שם הספק או את מספר החברה בדף.") + ` אחרי השמירה היא תלמד לזהות אותו גם ככה, בכל מקום בדף.`); }
   if ((draft.files || []).length > 1 && source !== "manual" && lines.length > 1) {
     const dd = dedupOverlap(lines, { printedTotal: nn(res?.totalWithVat), printedExVat: nn(res?.totalBeforeVat) }, !!res?.pricesIncludeVat);
     if (dd.notes.length) { lines.splice(0, lines.length, ...dd.lines); fixes.push(`אוחדו ${dd.notes.length} כפילויות מחפיפה בין הצילומים: ${dd.notes.join(" | ")}. אם השורה הופיעה באמת פעמיים במסמך, הוסף אותה בחזרה.`); }
@@ -1510,7 +1542,14 @@ async function saveDraft() {
     if (d.pdfMap) sup.pdfMap = { ...d.pdfMap, pricesIncludeVat: !!doc.pricesIncludeVat };
     else if (d.source === "ai" && d.pdfTable?.header) { const m = learnPdfMap(d.pdfTable, doc.lines); if (m) sup.pdfMap = { ...m, pricesIncludeVat: !!doc.pricesIncludeVat }; }
     /* learn the free reading of this supplier's photos from the lines the user just confirmed */
-    if (d.supMiss && d.supMiss.actual === supId) { const o = sup.ocrTpl || { docs: 0, heads: [], names: {}, codes: {}, layout: null }; const tops = [...(d.supMiss.seen || [])]; if (d.ocrText) { try { tops.push(...(FREE.header(d.ocrText.split(/\r?\n/)).top || []).slice(0, 2)); } catch (e) {} } for (const t of tops) if (t && !o.heads.includes(t)) o.heads.push(t); o.heads = o.heads.slice(-8); sup.ocrTpl = o; }
+    if (d.supMiss && d.supMiss.actual === supId) {
+      const o = sup.ocrTpl || { docs: 0, heads: [], names: {}, codes: {}, layout: null }; const txt = d.ocrText || d.lowText || "";
+      for (const t of [...(d.supMiss.seen || []), ...bestLines(sup.name, txt)]) if (t && !o.heads.includes(t)) o.heads.push(t);
+      o.heads = o.heads.slice(-10);
+      const tx = String(sup.taxId || d.taxId || "").replace(/\D/g, "");
+      if (tx.length >= 8) { o.taxSeen = o.taxSeen || []; for (const r of digitRuns(txt)) if (r !== tx && FREE.lev(r, tx) <= 2 && !o.taxSeen.includes(r)) o.taxSeen.push(r); o.taxSeen = o.taxSeen.slice(-6); }
+      sup.ocrTpl = o;
+    }
     if (d.ocrText && (d.source === "ai" || d.source === "ocr")) { try { const t = FREE.learn(sup.ocrTpl, d.ocrText, doc.lines, { pricesIncludeVat: doc.pricesIncludeVat }); if (t.layout) sup.ocrTpl = t; } catch (e) { console.error(e); } }
     if (!sup.taxId && d.taxId) sup.taxId = d.taxId;
     sup.lastDoc = doc.date; delete sup.id;
