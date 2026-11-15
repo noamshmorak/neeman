@@ -125,6 +125,19 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
 .camframe{position:absolute;border:3px dashed #fff;border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:border-color .15s}.camframe.ok{border-color:#2ecc71;border-style:solid}
 .camstate{font-weight:600;margin:6px 0}.camstate.good{color:#1b7a3a}.camstate.warn{color:#b45309}
 .camwrap{max-width:520px}
+.camflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:4}.camflash.go{animation:camflash .32s ease-out}
+@keyframes camflash{0%{opacity:.95}100%{opacity:0}}
+.camfly{position:absolute;inset:0;z-index:3;width:100%;height:100%;object-fit:contain;background:#000;border:4px solid #2ecc71;box-sizing:border-box;transform-origin:50% 100%;transition:transform .6s cubic-bezier(.5,0,.8,.4),opacity .6s ease-in}
+.camfly.go{transform:translateY(62%) scale(.14);opacity:.2}
+.cambadge{position:absolute;top:8px;inset-inline-start:8px;z-index:5;background:rgba(0,0,0,.65);color:#fff;font-weight:800;font-size:22px;padding:2px 12px;border-radius:20px}
+.cambadge.pop{animation:campop .45s ease-out}@keyframes campop{0%{transform:scale(1.8);background:#2ecc71}100%{transform:scale(1)}}
+.camstrip{display:flex;gap:6px;overflow-x:auto;min-height:56px;padding:4px 0}
+.camth{position:relative;flex:0 0 auto;width:44px;height:54px;border-radius:6px;overflow:hidden;border:2px solid #2ecc71;animation:campop .45s ease-out}
+.camth.dup{border-color:#e67e22}.camth img{width:100%;height:100%;object-fit:cover}
+.camth b{position:absolute;bottom:0;inset-inline-start:0;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:0 4px}
+.camth button{position:absolute;top:0;inset-inline-end:0;border:0;background:rgba(0,0,0,.7);color:#fff;font-size:12px;line-height:1;padding:2px 4px}
+.camgo{width:100%;font-size:18px;padding:12px;background:#1b7a3a;color:#fff;border:0;border-radius:10px;font-weight:700}
+.camshots{display:flex;gap:8px}.camshots .btn.primary{flex:1;font-size:17px;padding:12px}
 
 .sc-top{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}.sc-top input{flex:1;min-width:150px}
 .sccard{border:1px solid var(--line,#ddd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
@@ -633,6 +646,7 @@ const CAM_MSG = {
   blur: "החזיקו יציב, התמונה לא חדה",
   ok: "מצוין. אפשר לצלם",
   done: "הדף נקלט. הניחו את הדף הבא",
+  unclear: "לא רואים את קצוות הדף על הרקע. אפשר לצלם בכל זאת, או להניח את הדף על רקע כהה",
 };
 const CAM_TYPE = { page: "דף", wide: "מסמך לרוחב", long: "קבלה ארוכה" };
 /* find the paper in the view: the biggest bright, colourless region. gray/sat: grids gw x gh. */
@@ -668,11 +682,13 @@ function analyzePaper(gray, sat, gw, gh, sharp) {
   const cf = { l: contact("l"), r: contact("r"), t: contact("t"), b: contact("b") };
   for (const k of ["l", "r", "t", "b"]) cut[k] = cut[k] && cf[k] >= 0.3;
   const touches = cut.l || cut.r || cut.t || cut.b;
+  const nCut = (cut.l ? 1 : 0) + (cut.r ? 1 : 0) + (cut.t ? 1 : 0) + (cut.b ? 1 : 0);
   const long = Math.max(bw, bh), short = Math.min(bw, bh), aspect = long / Math.max(1, short);
   const type = aspect >= 2.1 ? "long" : bw > bh * 1.15 ? "wide" : "page";
   const info = { bbox: { x: best.x0, y: best.y0, w: bw, h: bh }, fill, darkFrac, cover, areaFrac, type, cut, aspect };
   const lowText = darkFrac < 0.01 && areaFrac >= 0.15;
   if ((darkFrac < 0.01 && !lowText) || areaFrac < 0.04) return out("none", info);
+  if (nCut >= 3 || areaFrac > 0.82) return out("unclear", info);   /* a white table under a white page: the edges can't be told apart */
   if (touches) return out("cut", info);
   if (cover < 0.5 || areaFrac < 0.13) return out("closer", info);
   if (lowText || (sharp != null && sharp < 0.45)) return out("blur", info);
@@ -688,18 +704,21 @@ async function openCam() {
   catch (e) { toast("אין גישה למצלמה. אפשר לצלם עם מצלמת המכשיר או לבחור קובץ."); fallback(); return; }
   const bg = document.createElement("div"); bg.className = "modal-bg";
   bg.innerHTML = `<div class="modal camwrap"><div class="row between"><h2>צילום חשבונית</h2><span class="small muted" data-count>0 דפים</span></div>
-    <div class="camstage"><video autoplay playsinline muted></video><div class="camframe" data-frame></div></div>
+    <div class="camstage"><video autoplay playsinline muted></video><div class="camframe" data-frame></div><span class="cambadge" data-badge hidden></span><div class="camflash" data-flash></div></div>
+    <div class="camstrip" data-strip></div>
     <p class="camstate" data-state>${CAM_MSG.none}</p><p class="small muted" data-hint hidden>קבלה ארוכה מאוד? צלמו בחלקים, מלמעלה למטה, עם חפיפה של שורה או שתיים בין הצילומים.</p>
-    <div class="row"><button class="btn primary" data-shot disabled>צלם דף</button><button class="btn ghost" data-force hidden>צלם בכל זאת</button><button class="btn" data-torch hidden>🔦</button><button class="btn" data-done>סיימתי</button></div>
-    <p class="small muted">המצלמה מזהה לבד את סוג המסמך. המסמך צריך להיכנס כולו לתמונה, בלי להיחתך בקצוות.</p></div>`;
+<div class="camshots"><button class="btn primary" data-shot>צלם בכל זאת</button><button class="btn" data-torch hidden>🔦</button></div>
+    <button class="camgo" data-done hidden>סיימתי, לקרוא את המסמך</button>
+    <p class="small muted">המסגרת הירוקה מסמנת שהדף מזוהה, אבל אפשר לצלם בכל רגע. אחרי כל צילום הדף יורד לפס התמונות למטה. כשסיימתם את כל הדפים לחצו על "סיימתי".</p></div>`;
   document.body.append(bg);
-  const v = bg.querySelector("video"), stage = bg.querySelector(".camstage"), fr = bg.querySelector("[data-frame]"), st = bg.querySelector("[data-state]"), shotBtn = bg.querySelector("[data-shot]"), forceBtn = bg.querySelector("[data-force]"), hint = bg.querySelector("[data-hint]");
+  const v = bg.querySelector("video"), stage = bg.querySelector(".camstage"), fr = bg.querySelector("[data-frame]"), st = bg.querySelector("[data-state]"), shotBtn = bg.querySelector("[data-shot]"), doneBtn = bg.querySelector("[data-done]"), badge = bg.querySelector("[data-badge]"), flash = bg.querySelector("[data-flash]"), strip = bg.querySelector("[data-strip]"), hint = bg.querySelector("[data-hint]");
   v.srcObject = stream;
-  let shots = 0, okStreak = 0, ready = false, state = "none", since = Date.now(), stopped = false, timer = 0, cool = 0, last = null, cur = null;
+  const DUPMSG = "⚠ זה נראה כמו הדף שצולם הרגע. אם זה דף אחר, המשיכו. אם לא, הסירו אותו בלחיצה על ✕ בפס התמונות.";
+  let dupMsg = 0, shots = 0, okStreak = 0, badStreak = 0, ready = false, state = "none", since = Date.now(), stopped = false, timer = 0, cool = 0, lock = 0, last = null, lastOk = null, cur = null, hashes = [];
   const track = stream.getVideoTracks()[0];
   try { if (track.getCapabilities?.().torch) bg.querySelector("[data-torch]").hidden = false; } catch (e) {}
   const g = document.createElement("canvas"), gx = g.getContext("2d", { willReadFrequently: true }), sc = document.createElement("canvas"), sx = sc.getContext("2d", { willReadFrequently: true });
-  const setState = (s2, type) => { if (s2 !== state) { state = s2; since = Date.now(); } st.textContent = s2 === "ok" && type ? "זוהה: " + CAM_TYPE[type] + ". " + CAM_MSG.ok : CAM_MSG[s2]; st.className = "camstate " + (s2 === "ok" ? "good" : "warn"); fr.classList.toggle("ok", s2 === "ok"); hint.hidden = type !== "long"; };
+  const setState = (s2, type) => { if (s2 !== state) { state = s2; since = Date.now(); } st.textContent = s2 === "ok" && type ? "זוהה: " + CAM_TYPE[type] + ". " + CAM_MSG.ok : CAM_MSG[s2]; if (s2 === "done" && Date.now() < dupMsg) st.textContent = DUPMSG; st.className = "camstate " + (s2 === "ok" ? "good" : "warn"); fr.classList.toggle("ok", s2 === "ok"); hint.hidden = type !== "long"; };
   const showBox = (bx) => {
     // bx in 0..1 of the video; smooth so the outline does not jitter
     cur = cur ? { x: cur.x + (bx.x - cur.x) * 0.5, y: cur.y + (bx.y - cur.y) * 0.5, w: cur.w + (bx.w - cur.w) * 0.5, h: cur.h + (bx.h - cur.h) * 0.5 } : bx;
@@ -726,13 +745,18 @@ async function openCam() {
           a = analyzePaper(gray, sat, GW, GH, sharp);
         }
         last = a; window.NCAM_LAST = { state: a.state, type: a.type, sharp, cut: a.cut, areaFrac: a.areaFrac };
-        if (a.bbox && a.state !== "none") showBox({ x: a.bbox.x / GW, y: a.bbox.y / GH, w: a.bbox.w / GW, h: a.bbox.h / GH });
+        /* the green frame stays put for ~1.4 s of bad frames, so a flickering detection (white table) no longer makes it jump */
+        if (a.state === "ok") { lastOk = a; badStreak = 0; } else if (state === "ok") badStreak++;
+        const holding = state === "ok" && a.state !== "ok" && badStreak < 4 && lastOk;
+        const shown = a.state === "ok" ? a : holding ? lastOk : null;
+        if (shown && shown.bbox) showBox({ x: shown.bbox.x / GW, y: shown.bbox.y / GH, w: shown.bbox.w / GW, h: shown.bbox.h / GH });
         else { cur = null; Object.assign(fr.style, { left: "8%", top: "6%", width: "84%", height: "88%" }); }
         if (Date.now() < cool) { okStreak = 0; setState("done"); }
+        else if (holding) setState("ok", lastOk.type);
         else { okStreak = a.state === "ok" ? okStreak + 1 : 0; setState(a.state === "ok" ? (okStreak >= 2 || state === "ok" ? "ok" : state) : a.state, a.state === "ok" || state === "ok" ? a.type : null); }
       }
     } catch (e) { console.error(e); }
-    ready = state === "ok"; shotBtn.disabled = !ready; forceBtn.hidden = ready || Date.now() - since < 6000;
+    ready = state === "ok"; shotBtn.textContent = ready ? "צלם דף" : "צלם בכל זאת";
     timer = setTimeout(tick, 350);
   };
   tick();
@@ -740,20 +764,60 @@ async function openCam() {
   const shoot = async (framed) => {
     const vw = v.videoWidth, vh = v.videoHeight; if (!vw) return;
     let sx0 = 0, sy0 = 0, sw = vw, sh = vh, type = "";
-    if (framed && last && last.bbox) { const GW = 120, GH = Math.max(8, Math.round(GW * vh / vw)), m = 0.015, bx = last.bbox;
-      sx0 = Math.max(0, (bx.x / GW - m) * vw); sy0 = Math.max(0, (bx.y / GH - m) * vh); sw = Math.min(vw - sx0, (bx.w / GW + 2 * m) * vw); sh = Math.min(vh - sy0, (bx.h / GH + 2 * m) * vh); type = last.type; }
+    const useA = state === "ok" ? (last && last.state === "ok" ? last : lastOk) : null;
+    if (framed && useA && useA.bbox) { const GW = 120, GH = Math.max(8, Math.round(GW * vh / vw)), m = 0.015, bx = useA.bbox;
+      sx0 = Math.max(0, (bx.x / GW - m) * vw); sy0 = Math.max(0, (bx.y / GH - m) * vh); sw = Math.min(vw - sx0, (bx.w / GW + 2 * m) * vw); sh = Math.min(vh - sy0, (bx.h / GH + 2 * m) * vh); type = useA.type; }
     const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
     c.getContext("2d").drawImage(v, sx0, sy0, sw, sh, 0, 0, c.width, c.height);
     const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.92));
     const f = new File([blob], `page-${Date.now()}.jpg`, { type: "image/jpeg" });
-    draft.files.push({ file: f, kind: "img", url: URL.createObjectURL(f), framed, docType: type });
-    shots++; bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
-    okStreak = 0; cool = Date.now() + 1600; setState("done"); try { navigator.vibrate?.(40); } catch (e) {}
+    const url = URL.createObjectURL(f), entry = { file: f, kind: "img", url, framed, docType: type };
+    /* a tiny fingerprint of the picture: the same page photographed twice looks (almost) the same */
+    const HW = 40, hc = document.createElement("canvas"); hc.width = HW; hc.height = HW; const hx = hc.getContext("2d", { willReadFrequently: true }); hx.drawImage(c, 0, 0, HW, HW);
+    const hd = hx.getImageData(0, 0, HW, HW).data, bits = new Float32Array(HW * HW); let mean = 0;
+    for (let i = 0; i < HW * HW; i++) { bits[i] = 255 - (hd[i * 4] * 0.3 + hd[i * 4 + 1] * 0.59 + hd[i * 4 + 2] * 0.11); mean += bits[i]; } mean /= bits.length; for (let i = 0; i < bits.length; i++) bits[i] -= mean;
+    /* how alike two pages look: correlation of their "ink maps" (1 = the same picture) */
+    const corr = (a, b) => { let ab = 0, aa = 0, bb = 0; for (let i = 0; i < a.length; i++) { ab += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i]; } return aa && bb ? ab / Math.sqrt(aa * bb) : 0; };
+    const near = hashes.length ? Math.max(...hashes.map(h => corr(h.bits, bits))) : 0, dup = near > 0.9; window.NCAM_HAM = near;
+    entry.hash = bits; hashes.push({ bits, entry });
+    /* the free reader starts on this page right away; if it is still busy with the previous page, Claude gets this one */
+    const before = draft.files.length;
+    if (!draft.pipe || draft.pipe.n !== before || !draft.pipe.routes.every((r, i) => r.file === draft.files[i]?.file)) {
+      const sess = FREE.session(null), routes = [];
+      for (const e of draft.files) if (e.kind === "img") { sess.add(e.file); routes.push({ file: e.file, route: "free" }); }
+      draft.pipe = routes.length === before ? { sess, routes, n: routes.length } : null;
+    }
+    draft.files.push(entry);
+    if (draft.pipe) { const route = !draft.pipe.n || !draft.pipe.sess.busy() ? "free" : "claude"; const r = { file: f, route }; if (route === "free") draft.pipe.sess.add(f); else if (typeof sample !== "undefined" && sample) r.p = claudePart([before + 1], [f], null, null).catch(e => ({ __err: e }));   /* runs at once, in parallel */
+      draft.pipe.routes.push(r); draft.pipe.n++; }
+    shots++; lastShot = entry;
+    /* feedback: flash, vibration, the photo freezes and slides down into the strip, big counter */
+    try { navigator.vibrate?.(dup ? [60, 60, 60] : 45); } catch (e) {}
+    try { const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), gn = ac.createGain(); o.frequency.value = 1100; gn.gain.value = 0.05; o.connect(gn); gn.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.07); setTimeout(() => ac.close(), 300); } catch (e) {}
+    flash.classList.remove("go"); void flash.offsetWidth; flash.classList.add("go");
+    const fly = document.createElement("img"); fly.src = url; fly.className = "camfly"; stage.append(fly);
+    setTimeout(() => fly.classList.add("go"), 380); setTimeout(() => fly.remove(), 1100);
+    setTimeout(() => addThumb(entry, shots, dup), 900);
+    bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
+    badge.hidden = false; badge.textContent = "✓ דף " + shots; badge.classList.remove("pop"); void badge.offsetWidth; badge.classList.add("pop");
+    doneBtn.hidden = false; doneBtn.textContent = `סיימתי (${shots} ${shots === 1 ? "דף" : "דפים"}), לקרוא את המסמך`;
+    okStreak = 0; lock = Date.now() + 700; cool = Date.now() + (dup ? 3000 : 1800); setState("done");
+    if (dup) { dupMsg = cool; st.textContent = DUPMSG; st.className = "camstate warn"; }
+  };
+  let lastShot = null;
+  const addThumb = (entry, no, dup) => {
+    if (!draft.files.includes(entry)) return;
+    const d = document.createElement("div"); d.className = "camth" + (dup ? " dup" : ""); d.innerHTML = `<img src="${entry.url}"><b>${no}</b><button type="button" aria-label="הסר">✕</button>`;
+    d.querySelector("button").onclick = () => {
+      const i = draft.files.indexOf(entry); if (i >= 0) draft.files.splice(i, 1); draft.pipe = null; d.remove();
+      shots = draft.files.length; bg.querySelector("[data-count]").textContent = shots + (shots === 1 ? " דף" : " דפים");
+      if (!shots) { doneBtn.hidden = true; badge.hidden = true; } else { badge.textContent = "✓ " + shots + (shots === 1 ? " דף" : " דפים"); doneBtn.textContent = `סיימתי (${shots} ${shots === 1 ? "דף" : "דפים"}), לקרוא את המסמך`; }
+    };
+    strip.append(d); strip.scrollLeft = -9999;
   };
   bg.addEventListener("click", async e => {
     if (e.target.closest("[data-done]") || e.target === bg) { stop(); render(); }
-    else if (e.target.closest("[data-shot]")) { if (ready) await shoot(true); }
-    else if (e.target.closest("[data-force]")) await shoot(false);
+    else if (e.target.closest("[data-shot]")) { if (Date.now() < lock) return; await shoot(ready); }
     else if (e.target.closest("[data-torch]")) { try { const on = !bg._torch; await track.applyConstraints({ advanced: [{ torch: on }] }); bg._torch = on; } catch (er) { toast("הפלאש לא נתמך במכשיר הזה"); } }
   });
 }
@@ -1017,6 +1081,27 @@ const FREE = (() => {
     full.catch(() => resHead({ quick: "" }));
     return { head, full };
   }
+  /* a reading session that takes pages one by one as they are photographed: page 1 starts at once, the next pages queue behind it */
+  function session(step) {
+    let resHead, headDone = false; const head = new Promise(r => { resHead = r; });
+    const texts = []; let chain = Promise.resolve(), n = 0, pending = 0;
+    const add = (blob) => {
+      const i = n++; pending++;
+      chain = chain.then(async () => {
+        try {
+          const w = await getWorker(step);
+          step && step(i ? `קורא בחינם את עמוד ${i + 1}…` : "קורא את המסמך בחינם, בטלפון…");
+          let cv = await blobToCanvas(blob), low = "";
+          try { const st = await straighten(cv, w); cv = st.canvas; low = st.low; } catch (e) { console.error(e); }
+          if (i === 0 && !headDone) { headDone = true; resHead({ quick: low }); }
+          const r = await w.recognize(prep(cv)); texts[i] = r.data.text || "";
+        } catch (e) { console.error(e); texts[i] = ""; if (i === 0 && !headDone) { headDone = true; resHead({ quick: "" }); } }
+        finally { pending--; }
+      });
+      return i;
+    };
+    return { add, head, busy: () => pending > 0, pages: () => n, text: () => chain.then(() => texts.join("\n")) };
+  }
   async function ocr(blobs, step) { return start(blobs, step).full; }
   function warm() { getWorker(null).catch(() => {}); }
 
@@ -1109,7 +1194,7 @@ const FREE = (() => {
   }
   /* after the user saved the confirmed lines: learn how this supplier's photos look */
   function learn(old, text, lines, extra) {
-    const T = { docs: (old?.docs || 0) + 1, heads: [...(old?.heads || [])], names: { ...(old?.names || {}) }, codes: { ...(old?.codes || {}) }, layout: old?.layout || null, pricesIncludeVat: !!extra.pricesIncludeVat };
+    const T = { ...(old || {}), docs: (old?.docs || 0) + 1, heads: [...(old?.heads || [])], names: { ...(old?.names || {}) }, codes: { ...(old?.codes || {}) }, layout: old?.layout || null, pricesIncludeVat: !!extra.pricesIncludeVat };
     const rows = String(text || "").split(/\r?\n/).map(clean).filter(Boolean), h = header(rows);
     for (const t of (h.top || []).slice(0, 2)) if (!T.heads.includes(t)) T.heads.push(t);
     T.heads = T.heads.slice(-8);
@@ -1129,7 +1214,7 @@ const FREE = (() => {
     trim(T.names); trim(T.codes);
     return T;
   }
-  return { ocr, start, warm, read, learn, header, whichSupplier, split, sim, lev, heb };
+  return { ocr, start, session, warm, read, learn, header, whichSupplier, split, sim, lev, heb };
 })();
 
 let readCtl = null;
@@ -1148,13 +1233,21 @@ async function readDoc() {
         A known supplier with a learned layout -> read the whole page here, free. Not sure -> Claude. The full text keeps reading in the background so the supplier can be learned. */
   let why = "fail", claudeStarted = false, guess = null, seen = [];
   const sayOcr = t => { if (!claudeStarted) say(t); };
-  const sess = FREE.start(images, sayOcr);
-  const ocrP = sess.full.then(t => { draft.ocrText = t; return t; }).catch(e => { console.error(e); return null; });
+  /* pages photographed in the camera were already queued as they were taken (pipe); anything else is queued now */
+  const pf = draft.files, pipe = draft.pipe;
+  const pipeOk = pipe && pipe.n === pf.length && pf.every((f, i) => f.kind === "img" && pipe.routes[i] && pipe.routes[i].file === f.file);
+  let sess, routes;
+  if (pipeOk) { sess = pipe.sess; routes = pipe.routes.map(r => r.route); }
+  else { sess = FREE.session(sayOcr); routes = images.map(() => "free"); images.forEach(b => sess.add(b)); }
+  const claudeIdx = routes.map((r, i) => r === "claude" ? i : -1).filter(i => i >= 0);
+  const hybrid = claudeIdx.length > 0 && claudeIdx.length < images.length;
+  const ocrP = sess.text().then(t => { draft.ocrText = t; return t; }).catch(e => { console.error(e); return null; });
   draft.ocrP = ocrP;
+  let part = null;   /* Claude reading only the pages the free reader had no time for */
   const sups = Object.values(S.suppliers), chosen = S.suppliers[draft.supplierId];
   if (!chosen && !sups.length) why = "new";
   else {
-    const hd = await Promise.race([sess.head, new Promise(r => setTimeout(() => r(null), 40000))]);
+    const hd = await Promise.race([sess.head, new Promise(r => setTimeout(() => r(null), 15000))]);
     if (hd === null) why = "slow";
     else {
       try {
@@ -1166,11 +1259,26 @@ async function readDoc() {
         else if (!guess.ocrTpl?.layout) { why = "notpl"; if (!draft.supplierId) draft.supplierId = guess.id; }
         else {
           why = "unsure"; if (!draft.supplierId) draft.supplierId = guess.id;
-          const t = await Promise.race([ocrP, new Promise(r => setTimeout(() => r("__slow"), 45000))]);
+          const t = await Promise.race([ocrP, new Promise(r => setTimeout(() => r("__slow"), 30000))]);
           if (t === "__slow") why = "slow";
           else if (t) {
             const fr = FREE.read(draft.ocrText, guess);
-            if (fr.sure) {
+            if (hybrid && fr.res.lines.length && fr.res.lines.every(l => l.qty > 0 && l.unitPrice > 0) && fr.sumOk !== false) {
+              say("העמודים הראשונים נקראו בחינם, ממתין ל-Claude על שאר העמודים…");
+              const got = await Promise.all(claudeIdx.map(async i => ({ no: i + 1, res: await pipe.routes[i].p })));
+              const cr = got.every(g => g.res && !g.res.__err && Array.isArray(g.res.lines)) ? mergeParts(got) : null;
+              if (cr) {
+                const ocrText = draft.ocrText; draft.supplierId = guess.id;
+                const m = { ...fr.res, lines: [...fr.res.lines, ...cr.lines],
+                  totalBeforeVat: cr.totalBeforeVat ?? fr.res.totalBeforeVat, vatAmount: cr.vatAmount ?? fr.res.vatAmount, totalWithVat: cr.totalWithVat ?? fr.res.totalWithVat,
+                  docNo: fr.res.docNo || cr.docNo || null, date: fr.res.date || cr.date || null, supplierTaxId: fr.res.supplierTaxId || cr.supplierTaxId || null,
+                  docDiscount: cr.docDiscount && cr.docDiscount.type !== "none" ? cr.docDiscount : fr.res.docDiscount, doubts: [...(cr.doubts || [])] };
+                startReview(m, "ocr"); draft.ocrText = ocrText;
+                draft.srcNote = `מסמך של ${images.length} עמודים: העמודים ${[...Array(images.length).keys()].filter(i => routes[i] === "free").map(i => i + 1).join(", ")} נקראו בטלפון בחינם והשאר (${claudeIdx.map(i => i + 1).join(", ")}) נקראו ב-Claude במקביל, ואוחדו. כדאי לעבור על אזור החיבור בין העמודים.`;
+                render(); return;
+              }
+              why = "unsure";
+            } else if (!hybrid && fr.sure) {
               const ocrText = draft.ocrText; draft.supplierId = guess.id;
               startReview(fr.res, "ocr");
               draft.ocrText = ocrText;
@@ -1194,6 +1302,19 @@ async function readDoc() {
     const sup = S.suppliers[draft.supplierId];
     const prompt = buildPrompt(sup, draft.kind, pdfText);
     readCtl = new AbortController();
+    /* some pages were already sent to Claude while shooting: only the rest still needs reading */
+    let done = null;
+    if (hybrid && pipeOk) {
+      const got = await Promise.all(claudeIdx.map(async i => ({ no: i + 1, res: await pipe.routes[i].p })));
+      if (got.every(g => g.res && !g.res.__err && Array.isArray(g.res.lines))) {
+        const rest = routes.map((r, i) => r === "free" ? i : -1).filter(i => i >= 0);
+        say(WHY[why] + " שאר העמודים כבר נקראו ברקע.");
+        const fres = await claudePart(rest.map(i => i + 1), rest.map(i => images[i]), sup, images.length);
+        done = mergeParts([...got, { no: rest[0] + 1, res: fres }]);
+        const ocrText = draft.ocrText, sg = draft.supGuess; startReview(done, "ai"); draft.ocrText = ocrText; draft.ocrP = ocrP;
+        draft.srcNote = "מסמך של " + images.length + " עמודים: חלק מהעמודים נקראו ב-Claude בזמן הצילום והשאר אחריו, ואוחדו. כדאי לעבור על אזור החיבור בין העמודים."; render(); return;
+      }
+    }
     say(WHY[why] + " זה לוקח בדרך כלל חצי דקה עד דקה.");
     const res = await sample.json(prompt, { images, signal: readCtl.signal, cache: false });
     const ocrText = draft.ocrText, sg = draft.supGuess, ss = draft.supSeen; startReview(res, "ai"); draft.ocrText = ocrText; draft.ocrP = ocrP; draft.srcNote = { new: "ספק חדש: Claude קרא את המסמך. אחרי השמירה אלמד את הספק, ובפעם הבאה הקריאה תהיה בחינם.", notpl: "Claude קרא את המסמך. אחרי השמירה תילמד גם הקריאה החינמית של הספק.", unsure: "הקריאה החינמית לא הייתה בטוחה, ולכן Claude קרא את המסמך.", fail: "הקריאה החינמית לא הצליחה, ולכן Claude קרא את המסמך.", slow: "הקריאה החינמית ארוכה מדי בטלפון הזה, ולכן Claude קרא את המסמך." }[why]; render();
@@ -1204,7 +1325,22 @@ async function readDoc() {
     render();
   }
 }
-function buildPrompt(sup, kind, pdfText) {
+/* Claude reads only some pages of a longer document (the others are read on the device) and says nothing it cannot see */
+async function claudePart(nos, imgs, sup, total) {
+  const lim = await sample.limits(); if (!lim?.images) throw new Error("noimg");
+  const note = `IMPORTANT: this is a ${total ? total + "-page" : "multi-page"} document, but you are given ONLY page${nos.length > 1 ? "s" : ""} ${nos.join(", ")} (the other pages are read separately). These pages may start in the middle of the table with no header and no column titles, and the first row may repeat the last row of the previous page. Read only the rows visible on the given pages, join a row that is split over two printed lines, and never invent rows. Fill the document header and totals only if they are visible on these pages, otherwise null.`;
+  return sample.json(buildPrompt(sup, draft.kind, "", note), { images: imgs.slice(0, lim.images.maxCount), cache: false });
+}
+/* join the readings of separate pages (in page order) into one document reading */
+function mergeParts(list) {
+  list = list.slice().sort((a, b) => a.no - b.no); const first = k => { for (const x of list) if (x.res?.[k] != null && x.res[k] !== "") return x.res[k]; return null; }, lastv = k => { for (const x of list.slice().reverse()) if (x.res?.[k] != null) return x.res[k]; return null; };
+  const dd = list.map(x => x.res?.docDiscount).filter(d => d && d.type !== "none").pop();
+  return { docType: first("docType") || "invoice", supplierName: first("supplierName") || "", supplierTaxId: first("supplierTaxId"), docNo: first("docNo"), date: first("date"), validUntil: first("validUntil"),
+    pricesIncludeVat: !!first("pricesIncludeVat"), docDiscount: dd || { type: "none", value: 0, onVat: "before" },
+    totalBeforeVat: lastv("totalBeforeVat"), vatAmount: lastv("vatAmount"), totalWithVat: lastv("totalWithVat"),
+    lines: list.flatMap(x => x.res?.lines || []), templateNotes: first("templateNotes") || "", doubts: list.flatMap(x => x.res?.doubts || []) };
+}
+function buildPrompt(sup, kind, pdfText, note) {
   const tpl = sup ? `\nKNOWN LAYOUT FOR THIS SUPPLIER ("${sup.name}"):\n${sup.templateNotes || "(none yet)"}\n${sup.hints ? "Store owner's rules for this supplier: " + sup.hints + "\n" : ""}${(sup.corrections || []).length ? "Past corrections the store owner made to earlier readings (apply the same logic):\n- " + sup.corrections.slice(-15).join("\n- ") + "\n" : ""}` : "";
   return `You are reading a ${kind === "quote" ? "price quote (הצעת מחיר)" : "supplier invoice / delivery note (חשבונית / תעודת משלוח)"} from an Israeli supplier to a small store. The document is in Hebrew. The images are its pages in order.
 Extract every product line exactly as printed. Reply with ONLY this JSON:
@@ -1214,6 +1350,7 @@ Extract every product line exactly as printed. Reply with ONLY this JSON:
 "totalBeforeVat":number|null,"vatAmount":number|null,"totalWithVat":number|null,
 "lines":[{"barcode":string|null,"supplierCode":string|null,"name":string,"qty":number,"freeQty":number,"packSize":number,"unitPrice":number,"lineDiscountPct":number,"lineTotal":number|null}],
 "templateNotes":string,
+"identity":{"taxId":string|null,"phones":[string],"anchors":[string],"headerPct":number},
 "doubts":[string]}
 Rules:
 - barcode: the 7-14 digit EAN/UPC (ברקוד). A supplier item code (מק"ט / קוד פריט) goes in supplierCode, never in barcode.
@@ -1226,10 +1363,11 @@ Rules:
 - pricesIncludeVat: true only if the unit prices already include מע"מ.
 - docDiscount: a discount on the whole document (הנחה כללית / הנחת סוף חשבון / הנחה לאחר מע"מ). onVat="after" when it is taken from the total that already includes VAT.
 - A tiny adjustment that only rounds the final total to whole shekels (agorot, e.g. 0.24) is NOT a discount: use docDiscount type "none". Do not list it in doubts.
+- identity: help a small on-device OCR program recognise THIS supplier next time from the top of the page. taxId = the supplier's company/VAT number exactly as printed (digits only). phones = the supplier's phone/fax numbers printed on the page (digits only). anchors = up to 6 short strings printed OUTSIDE the product table, in the top part of the page, that are distinctive to this supplier and would be easy for OCR to find again: the company name as printed (and any variant spelling or English name), website, slogan, address line, the document title style. Copy them exactly as printed. headerPct = the percent of the page height, measured from the top, that contains all of these (usually 15-30).
 - templateNotes: 3-6 short lines in Hebrew describing this supplier's layout for next time: which column holds the barcode, how bonus/free goods appear, how discounts appear, whether prices include VAT, pack units.
 - doubts: Hebrew notes ONLY about values that may be wrong and that the store owner should check by eye (blurry or unreadable digits, a line total that does not match qty × price, a page that seems missing). Do NOT explain readings you are confident about (which column you used, that bonus lines are free goods, which price includes VAT). A price "including VAT" that equals the price × 1.18, a line without a discount, and a few agorot of rounding in the totals are all normal: never list them. Empty array if nothing is doubtful.
 - The photos may be overlapping parts of one long receipt, top to bottom. A line that appears at the end of one photo and again at the start of the next is ONE line: list it once.
-- Use plain numbers. Never invent lines. If a value is unreadable use null and mention it in doubts.${tpl}${pdfText ? "\nText layer extracted from the PDF (Hebrew may appear reversed; prefer the images when they disagree):\n" + pdfText.slice(0, 14000) : ""}`;
+- Use plain numbers. Never invent lines. If a value is unreadable use null and mention it in doubts.${note ? "\n" + note : ""}${tpl}${pdfText ? "\nText layer extracted from the PDF (Hebrew may appear reversed; prefer the images when they disagree):\n" + pdfText.slice(0, 14000) : ""}`;
 }
 
 /* ----- matching ----- */
@@ -1289,6 +1427,13 @@ function identifySupplier(text) {
     const seenT = s.ocrTpl?.taxSeen || [];
     if (runs.some(d => d === t || seenT.includes(d) || (d.length === t.length && FREE.lev(d, t) <= 1))) return { sup: s, how: "taxid" };
   }
+  /* strings Claude marked as this supplier's recognisable marks (phone, site, name as printed...) */
+  { let bs = null, bh = 0, tie2 = false; const plain = String(text).replace(/\s+/g, " "), digitsAll = String(text).replace(/\D/g, "");
+    for (const s of sups) { let h = 0; for (const id of s.ocrTpl?.ids || []) {
+      if (/^\d+$/.test(id)) { if (runs.some(d => d === id || (d.length === id.length && FREE.lev(d, id) <= 1)) || (id.length >= 9 && digitsAll.includes(id))) h += 2; }
+      else if (plain.includes(id) || coName(plain).includes(coName(id)) && FREE.heb(coName(id)).length >= 4) h++; }
+      if (h > bh) { bh = h; bs = s; tie2 = false; } else if (h && h === bh) tie2 = true; }
+    if (bs && bh >= 1 && !tie2) return { sup: bs, how: "ids" }; }
   const lines = String(text).split(/\r?\n/).map(l => coName(l)).filter(l => FREE.heb(l).length >= 4);
   let best = null, sc = 0, tie = false;
   for (const s of sups) for (const ref of [s.name, ...(s.ocrTpl?.heads || [])]) {
@@ -1392,7 +1537,7 @@ function startReview(res, source) {
     newSupName: supId ? "" : (res?.supplierName || ""), taxId: res?.supplierTaxId || "",
     doc: { docNo: res?.docNo || "", date: res?.date || today(), validUntil: res?.validUntil || "", pricesIncludeVat: !!res?.pricesIncludeVat, docDiscount: { ...dDisc }, printedTotal: nn(res?.totalWithVat), printedExVat: nn(res?.totalBeforeVat), lines },
     ai: JSON.parse(JSON.stringify({ lines, pricesIncludeVat: !!res?.pricesIncludeVat, docDiscount: dDisc })),
-    templateNotes: res?.templateNotes || "", doubts, fixes, saveTemplate: true
+    templateNotes: res?.templateNotes || "", identity: res?.identity || null, doubts, fixes, saveTemplate: true
   };
   render();
 }
@@ -1551,6 +1696,15 @@ async function saveDraft() {
       sup.ocrTpl = o;
     }
     if (d.ocrText && (d.source === "ai" || d.source === "ocr")) { try { const t = FREE.learn(sup.ocrTpl, d.ocrText, doc.lines, { pricesIncludeVat: doc.pricesIncludeVat }); if (t.layout) sup.ocrTpl = t; } catch (e) { console.error(e); } }
+    if (d.identity && (d.source === "ai" || d.source === "ocr")) { try {
+      const o = sup.ocrTpl || { docs: 0, heads: [], names: {}, codes: {}, layout: null }, id = d.identity, ids = o.ids || [];
+      const add = v => { v = String(v || "").trim(); if (v && !ids.includes(v)) ids.push(v); };
+      for (const a of id.anchors || []) if (FREE.heb(a).length >= 4 || /[a-z]{5,}/i.test(a)) add(a);
+      for (const ph of id.phones || []) { const dgt = String(ph).replace(/\D/g, ""); if (dgt.length >= 9) add(dgt); }
+      const tx2 = String(id.taxId || "").replace(/\D/g, ""); if (tx2.length >= 8) add(tx2);
+      o.ids = ids.slice(-16); const hp = Number(id.headerPct); if (hp >= 8 && hp <= 60) o.headerPct = Math.round(Math.max(o.headerPct || 0, hp));
+      sup.ocrTpl = o;
+    } catch (e) { console.error(e); } }
     if (!sup.taxId && d.taxId) sup.taxId = d.taxId;
     sup.lastDoc = doc.date; delete sup.id;
     await put("suppliers/" + supId, sup);
