@@ -148,7 +148,10 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500}
 .scrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line,#eee)}
 .scstep{display:flex;gap:4px;align-items:center}.scstep button{width:34px;height:34px}.scstep b{min-width:28px;text-align:center}
 
-body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.worker #tabs a[data-v=cat],body.worker #tabs a[data-v=quotes],body.worker #tabs a[data-v=compare],body.worker #tabs a[data-v=suppliers]{display:none}
+body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.worker #tabs a[data-v=cat],body.worker #tabs a[data-v=quotes],body.worker #tabs a[data-v=compare],body.worker #tabs a[data-v=suppliers],body.worker #tabs a[data-v=report]{display:none}
+.rcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.rcard{border:1px solid var(--line,#ddd);border-radius:10px;padding:8px 12px}.rcard b{display:block;font-size:20px}
+.rchips{display:flex;flex-wrap:wrap;gap:6px}.rchips button{border:1px solid var(--line,#ccc);background:#fff;border-radius:99px;padding:4px 12px;font-size:14px}.rchips button.on{background:#1b7a3a;color:#fff;border-color:#1b7a3a}
+.creditbox{border:2px solid #e67e22;border-radius:10px;padding:10px;margin:8px 0}
 .syncchip{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line,#ddd);text-decoration:none;color:inherit;margin-inline-start:8px;white-space:nowrap}
 .syncchip.ok{color:#1b7a3a;border-color:#1b7a3a}.syncchip.warn{color:#b45309;border-color:#b45309}.syncchip.err{color:#b91c1c;border-color:#b91c1c}
 </style>
@@ -168,6 +171,7 @@ body.worker #tabs a[data-v=alerts],body.worker #tabs a[data-v=products],body.wor
         <a href="#compare" data-v="compare">מוצרים דומים</a>
         <a href="#suppliers" data-v="suppliers">ספקים</a>
         <a href="#invoices" data-v="invoices">חשבוניות</a>
+        <a href="#report" data-v="report">דוח חודשי</a>
         <a href="#setup" data-v="setup">הגדרות</a>
       </nav>
     </div>
@@ -560,7 +564,7 @@ function refresh() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["inbox", "scan", "alerts", "products", "cat", "compare", "quotes", "suppliers", "invoices", "setup"];
+const VIEWS = ["inbox", "scan", "alerts", "products", "cat", "compare", "quotes", "suppliers", "invoices", "report", "setup"];
 const WORKER_VIEWS = ["inbox", "scan", "invoices", "setup"];
 const isWorker = () => !!(window.NSYNC && NSYNC.isWorker());
 function route() { const h = location.hash.slice(1); view = VIEWS.includes(h) ? h : "inbox"; if (isWorker() && !WORKER_VIEWS.includes(view)) view = "inbox"; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === view)); render(); }
@@ -569,7 +573,7 @@ function go(v) { if (location.hash !== "#" + v) location.hash = v; else route();
 
 function render() {
   const el = $("#view");
-  const R = { inbox: vInbox, scan: vScan, alerts: vAlerts, products: vProducts, cat: vCat, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, setup: vSetup }[view];
+  const R = { inbox: vInbox, scan: vScan, alerts: vAlerts, products: vProducts, cat: vCat, compare: vCompare, quotes: vQuotes, suppliers: vSuppliers, invoices: vInvoices, report: vReport, setup: vSetup }[view];
   el.innerHTML = R();
   after[view]?.();
 }
@@ -1730,6 +1734,7 @@ async function saveDraft() {
     const rec = { supplierId: supId, docNo: calc.docNo, date: calc.date, pricesIncludeVat: calc.pricesIncludeVat, docDiscount: calc.docDiscount, docDiscPct: +C.docDiscPct.toFixed(3), totalExVat: +C.totalExVat.toFixed(2), totalWithVat: +(doc.printedTotal || C.totalWithVat).toFixed(2), lines, createdAt: mergeDoc?.createdAt || Date.now(), source: d.source || "manual" };
     { const by = (window.NSYNC && NSYNC.who()) || ""; if (by) rec.by = by; else if (mergeDoc?.by) rec.by = mergeDoc.by; }
     if (mergeDoc?.demo) rec.demo = true;
+    { const ex0 = mergeDoc || (d.editId ? coll.find(q => q.id === d.editId) : null); if (ex0?.creditAsked) rec.creditAsked = ex0.creditAsked; if (ex0?.creditGot) rec.creditGot = ex0.creditGot; }
     if (isQ) rec.validUntil = doc.validUntil || "";
     const id = d.editId || mergeDoc?.id || uid();
     await put((isQ ? "quotes/" : "purchases/") + id, rec);
@@ -2029,6 +2034,33 @@ function vSuppliers() {
     </div>`; }).join("") : emptyMsg("אין עדיין ספקים", "ספק נוצר אוטומטית בקליטת החשבונית הראשונה שלו.")}`;
 }
 
+/* ---------- missing goods -> credit request to the supplier ---------- */
+/* a line the receiver did not tick "arrived" is missing; only judged when receiving was started (some ticked) and not all */
+function missingOf(x) {
+  const L = x.lines || [], got = L.filter(l => l.arrived).length;
+  if (!got || got === L.length) return null;
+  const vf = vatF(), dd = n(x.docDiscPct) / 100;
+  const rows = L.filter(l => !l.arrived).map(l => { let pr = n(l.unitPrice); if (x.pricesIncludeVat) pr /= vf;
+    return { name: l.name || "", barcode: cleanBarcode(l.barcode) || "", qty: n(l.qty), free: n(l.freeQty), ex: n(l.qty) * pr * (1 - n(l.lineDiscountPct) / 100) * (1 - dd) }; });
+  const ex = rows.reduce((a, r) => a + r.ex, 0);
+  return { rows, ex, inc: ex * vf, total: L.length };
+}
+function creditText(x, m) {
+  const sup = S.suppliers[x.supplierId], store = (window.NSYNC && NSYNC.sync && NSYNC.sync.storeName) || "";
+  const lines = m.rows.map(r => `• ${r.name}${r.barcode ? " (" + r.barcode + ")" : ""} - ${[r.qty ? "כמות " + r.qty : "", r.free ? "בונוס " + r.free : ""].filter(Boolean).join(", ")}`);
+  return `שלום${sup ? " " + sup.name : ""},${store ? " כאן " + store + "." : ""} לגבי ${x.docNo ? "מסמך מס' " + x.docNo : "המסמך"} מתאריך ${fmtDate(x.date)}: הפריטים הבאים חויבו ולא הגיעו:\n${lines.join("\n")}\nנבקש זיכוי על סך ${money(m.inc)} כולל מע"מ (${money(m.ex)} לפני מע"מ). תודה`;
+}
+const waLink = (phone, text) => { let d = String(phone || "").replace(/\D/g, ""); if (d.startsWith("0")) d = "972" + d.slice(1); return "https://wa.me/" + d + "?text=" + encodeURIComponent(text); };
+function creditPanel(x) {
+  const m = missingOf(x); if (!m) return "";
+  const sup = S.suppliers[x.supplierId];
+  const st = x.creditGot ? `<span class="pill good">הזיכוי התקבל</span>` : x.creditAsked ? `<span class="pill warn">נשלחה בקשת זיכוי ב-${fmtDate(x.creditAsked)}</span>` : `<span class="pill bad">לא נשלחה בקשת זיכוי</span>`;
+  return `<div class="creditbox" data-credit><div class="row between"><b>לא הגיעו ${m.rows.length} שורות מתוך ${m.total}. זיכוי נדרש: ${money(m.inc)} כולל מע"מ</b>${st}</div>
+    <div class="small">${m.rows.map(r => `${esc(r.name)} (${[r.qty ? "כמות " + r.qty : "", r.free ? "בונוס " + r.free : ""].filter(Boolean).join(", ")})`).join(" · ")}</div>
+    <div class="row"><label class="fld" style="flex:1;min-width:150px">טלפון הספק<input data-cphone dir="ltr" inputmode="tel" value="${esc(sup?.phone || "")}" placeholder="05XXXXXXXX"></label></div>
+    <div class="row"><button class="btn primary" data-csend>שלח לספק בוואטסאפ</button><button class="btn" data-ccopy>העתק את ההודעה</button><button class="btn ghost" data-cgot>${x.creditGot ? "בטל סימון שהתקבל" : "סמן שהזיכוי התקבל"}</button></div></div>`;
+}
+
 /* ---------- INVOICES ---------- */
 function vInvoices() {
   const L = [...S.purchases].sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
@@ -2043,6 +2075,7 @@ function docModal(kind, id) {
   bg.innerHTML = `<div class="modal"><div class="row between"><h2>${esc(supName(x.supplierId))}</h2><button class="btn ghost" data-x>סגור</button></div>
   <p class="muted">${kind === "q" ? "הצעת מחיר" : "חשבונית"} ${esc(x.docNo || "")} · ${fmtDate(x.date)}${x.by ? " · הועלה ע״י " + esc(x.by) : ""} · ${x.pricesIncludeVat ? "מחירים כולל מע\"מ" : "מחירים לפני מע\"מ"}${x.docDiscPct ? ` · הנחה כללית ${n(x.docDiscPct).toFixed(2)}%` : ""}</p>
   <div class="tbl"><table><thead><tr><th>הגיע</th><th>מוצר</th><th>כמות</th><th>בונוס</th><th>מחיר</th><th>הנחה</th><th>עלות אמיתית ליח'</th></tr></thead><tbody>${(x.lines || []).map(l => `<tr><td style="color:var(--good);font-weight:700">${l.arrived ? "✓" : "—"}</td><td>${esc(l.name)}<br><span class="small muted num">${esc(l.barcode || "")}</span></td><td class="num">${l.qty}${l.packSize > 1 ? " ×" + l.packSize : ""}</td><td class="num">${l.freeQty || "—"}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${l.lineDiscountPct ? l.lineDiscountPct + "%" : "—"}</td><td class="num">${money(l.eff)}</td></tr>`).join("")}</tbody></table></div>
+  ${kind === "q" || isWorker() ? "" : creditPanel(x)}
   <div class="row"><span>סה"כ: <b class="num">${money(x.totalWithVat)}</b></span></div>
   <div class="row between"><button class="btn" data-edit>פתח לעריכה</button>${isWorker() ? "" : `<button class="btn ghost danger" data-del>מחק</button>`}</div>
   <div class="warnbox" data-confirm hidden>למחוק את המסמך? העלויות שלו יוסרו מההשוואות. <button class="btn danger" data-delyes>כן, מחק</button></div></div>`;
@@ -2050,6 +2083,20 @@ function docModal(kind, id) {
   bg.addEventListener("click", async e => {
     if (e.target === bg || e.target.closest("[data-x]")) bg.remove();
     if (e.target.closest("[data-del]")) bg.querySelector("[data-confirm]").hidden = false;
+    const cr = e.target.closest("[data-csend],[data-ccopy],[data-cgot]");
+    if (cr && kind !== "q") {
+      const m = missingOf(x), box = bg.querySelector("[data-credit]");
+      if (cr.hasAttribute("data-cgot")) { const rec = { ...x }; delete rec.id; if (x.creditGot) delete rec.creditGot; else rec.creditGot = today(); await put("purchases/" + id, rec); toast(rec.creditGot ? "סומן שהזיכוי התקבל" : "הסימון בוטל"); bg.remove(); docModal(kind, id); return; }
+      if (!m) return;
+      const text = creditText(x, m);
+      if (cr.hasAttribute("data-ccopy")) { try { await navigator.clipboard.writeText(text); toast("ההודעה הועתקה"); } catch (er) { toast("ההעתקה נכשלה"); } return; }
+      const phone = box.querySelector("[data-cphone]").value.trim(), digits = phone.replace(/\D/g, "");
+      if (digits.length < 9) { toast("הכנס טלפון של הספק (05XXXXXXXX)"); return; }
+      const sup = S.suppliers[x.supplierId];
+      if (sup && sup.phone !== phone) { const sp = { ...sup, phone }; delete sp.id; try { await put("suppliers/" + sup.id, sp); } catch (er) { console.error(er); } }
+      const rec = { ...x }; delete rec.id; rec.creditAsked = today(); try { await put("purchases/" + id, rec); } catch (er) { console.error(er); }
+      window.open(waLink(phone, text), "_blank"); toast("נפתחה הודעת וואטסאפ מוכנה לספק"); bg.remove(); docModal(kind, id); return;
+    }
     if (e.target.closest("[data-delyes]")) { await del((kind === "q" ? "quotes/" : "purchases/") + id); bg.remove(); toast("נמחק"); }
     if (e.target.closest("[data-edit]")) {
       bg.remove();
@@ -2268,6 +2315,75 @@ function vSetup() {
   ${window.LOCAL ? LOCAL.panel() : ""}<div class="panel"><h3>חיבור לקופה</h3><p class="muted">כרגע מחירי המכירה נכנסים מייצוא אקסל של הקופה (לשונית מוצרים) או בהקלדה. אם לקופה יש ממשק API אפשר לחבר אותה כך שהמחירים יתעדכנו לבד.</p></div>`;
 }
 
+/* ---------- MONTHLY REPORT (owner) ---------- */
+let rMonth = "", rCat = "all";
+const monthOf = d => String(d || "").slice(0, 7);
+const prevMonth = m => { const [y, mo] = m.split("-").map(Number); const d = new Date(y, mo - 2, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+const monthLabel = m => { try { return new Date(m + "-01T12:00:00").toLocaleDateString("he-IL", { month: "long", year: "numeric" }); } catch (e) { return m; } };
+function reportData(m) {
+  const pm = prevMonth(m), docs = S.purchases.filter(p => monthOf(p.date) === m);
+  const sup = {}; for (const p of docs) { const o = (sup[p.supplierId] ||= { docs: 0, ex: 0, inc: 0 }); o.docs++; o.ex += n(p.totalExVat); o.inc += n(p.totalWithVat); }
+  const prevSup = {}; let prevTot = 0; for (const p of S.purchases) if (monthOf(p.date) === pm) { prevSup[p.supplierId] = (prevSup[p.supplierId] || 0) + n(p.totalWithVat); prevTot += n(p.totalWithVat); }
+  const up = [], down = [], cheaper = [], fresh = [], fix = [];
+  for (const pid of Object.keys(IDX)) {
+    const ix = IDX[pid], P = S.products[pid]; if (!P) continue; const st = stats(pid);
+    const seen = new Set();
+    for (let i = 0; i < ix.inv.length; i++) { const r = ix.inv[i]; if (monthOf(r.date) !== m || seen.has(r.sup)) continue; seen.add(r.sup);
+      const prev = ix.inv.slice(i + 1).find(q => q.sup === r.sup); if (!prev) continue; const ch = r.eff / prev.eff - 1;
+      const row = { pid, name: P.name, sup: supName(r.sup), old: prev.eff, now: r.eff, ch, sell: st.sell, margin: st.margin, target: st.target, rec: st.rec, regMax: st.regMax };
+      if (ch > 0.005) up.push(row); else if (ch < -0.005) down.push(row); }
+    const first = ix.inv[ix.inv.length - 1]; if (first && monthOf(first.date) === m) fresh.push({ pid, name: P.name, sup: supName(first.sup), cost: first.eff, sell: st.sell, margin: st.margin });
+    const ch = st.alerts.find(a => a.t === "cheaper");
+    if (ch && st.cur) { const units = ix.inv.filter(q => q.sup === st.cur.sup && monthOf(q.date) === m).reduce((a, q) => a + (q.qty + q.free) * q.pack, 0);
+      if (units > 0) cheaper.push({ pid, name: P.name, cur: supName(st.cur.sup), curEff: st.cur.eff, best: supName(st.best.sup), bestEff: st.best.eff, units, save: units * (st.cur.eff - st.best.eff) }); }
+    for (const a of st.alerts) if (["margin", "noprice", "regover"].includes(a.t)) {
+      const target = a.t === "regover" ? st.regMax : st.rec; fix.push({ pid, name: P.name, why: { margin: "הרווח מתחת ליעד", noprice: "אין מחיר מכירה", regover: "מעל המחיר המקסימלי (מוצר בפיקוח)" }[a.t], sell: st.sell, margin: st.margin, rec: target }); }
+  }
+  up.sort((a, b) => b.ch - a.ch); down.sort((a, b) => a.ch - b.ch); cheaper.sort((a, b) => b.save - a.save);
+  const sold = S.changes.filter(c => c.at && new Date(c.at).toISOString().slice(0, 7) === m);
+  const missing = docs.map(d => ({ d, m: missingOf(d) })).filter(x => x.m);
+  return { docs, sup, prevSup, prevTot, up, down, cheaper, fresh, fix, sold, missing, tot: docs.reduce((a, p) => a + n(p.totalWithVat), 0), totEx: docs.reduce((a, p) => a + n(p.totalExVat), 0) };
+}
+function reportSections(R) {
+  const mny = money, P = pct;
+  return [
+    { k: "up", label: "מחיר קנייה עלה", head: ["מוצר", "ספק", "היה", "עכשיו", "שינוי", "מחיר מכירה", "רווח"], rows: R.up.map(r => ({ pid: r.pid, fix: r.margin != null && r.rec && r.sell && !r.regMax && r.margin < r.target - 0.005 ? r.rec : (r.regMax && r.sell > r.regMax + 0.005 ? r.regMax : null), c: [r.name, r.sup, mny(r.old), mny(r.now), "+" + P(r.ch), mny(r.sell), P(r.margin)], x: [r.name, r.sup, +r.old.toFixed(3), +r.now.toFixed(3), +r.ch.toFixed(4), r.sell, r.margin == null ? "" : +r.margin.toFixed(4)] })) },
+    { k: "down", label: "מחיר קנייה ירד", head: ["מוצר", "ספק", "היה", "עכשיו", "שינוי"], rows: R.down.map(r => ({ pid: r.pid, c: [r.name, r.sup, mny(r.old), mny(r.now), P(r.ch)], x: [r.name, r.sup, +r.old.toFixed(3), +r.now.toFixed(3), +r.ch.toFixed(4)] })) },
+    { k: "fix", label: "לתקן מחיר מכירה", head: ["מוצר", "סיבה", "מחיר היום", "רווח", "מחיר מומלץ"], rows: R.fix.map(r => ({ pid: r.pid, fix: r.rec && r.rec !== r.sell ? r.rec : null, c: [r.name, r.why, mny(r.sell), P(r.margin), mny(r.rec)], x: [r.name, r.why, r.sell ?? "", r.margin == null ? "" : +r.margin.toFixed(4), r.rec ?? ""] })) },
+    { k: "sold", label: "מחירי מכירה ששונו החודש", head: ["מוצר", "היה", "עכשיו", "תאריך", "עודכן בקופה"], rows: R.sold.map(c => ({ c: [c.name, mny(c.old), mny(c.new), fmtDate(new Date(c.at).toISOString().slice(0, 10)), c.exported ? "כן" : "לא"], x: [c.name, c.old ?? "", c.new, new Date(c.at).toISOString().slice(0, 10), c.exported ? "כן" : "לא"] })) },
+    { k: "cheaper", label: "ספק זול יותר (חיסכון אפשרי)", head: ["מוצר", "קנית מ", "עלות", "זול יותר אצל", "עלות", "יחידות החודש", "חיסכון אפשרי"], rows: R.cheaper.map(r => ({ pid: r.pid, c: [r.name, r.cur, mny(r.curEff), r.best, mny(r.bestEff), String(r.units), mny(r.save)], x: [r.name, r.cur, +r.curEff.toFixed(3), r.best, +r.bestEff.toFixed(3), r.units, +r.save.toFixed(2)] })) },
+    { k: "new", label: "מוצרים חדשים", head: ["מוצר", "ספק", "עלות", "מחיר מכירה", "רווח"], rows: R.fresh.map(r => ({ pid: r.pid, c: [r.name, r.sup, mny(r.cost), mny(r.sell), P(r.margin)], x: [r.name, r.sup, +r.cost.toFixed(3), r.sell ?? "", r.margin == null ? "" : +r.margin.toFixed(4)] })) },
+    { k: "missing", label: "חוסרים וזיכויים", head: ["ספק", "מסמך", "תאריך", "שורות שחסרו", "זיכוי כולל מע\"מ", "סטטוס"], rows: R.missing.map(({ d, m }) => ({ doc: d.id, c: [supName(d.supplierId), d.docNo || "—", fmtDate(d.date), String(m.rows.length), mny(m.inc), d.creditGot ? "הזיכוי התקבל" : d.creditAsked ? "נשלחה בקשה" : "לא נשלחה בקשה"], x: [supName(d.supplierId), d.docNo || "", d.date || "", m.rows.length, +m.inc.toFixed(2), d.creditGot ? "הזיכוי התקבל" : d.creditAsked ? "נשלחה בקשה" : "לא נשלחה בקשה"] })) },
+    { k: "sup", label: "קנייה לפי ספק", head: ["ספק", "חשבוניות", "לפני מע\"מ", "כולל מע\"מ", "חודש קודם", "שינוי"], rows: Object.entries(R.sup).sort((a, b) => b[1].inc - a[1].inc).map(([id, o]) => { const pv = R.prevSup[id] || 0; return { c: [supName(id), String(o.docs), mny(o.ex), mny(o.inc), pv ? mny(pv) : "—", pv ? (o.inc / pv - 1 >= 0 ? "+" : "") + P(o.inc / pv - 1) : "—"], x: [supName(id), o.docs, +o.ex.toFixed(2), +o.inc.toFixed(2), +pv.toFixed(2), pv ? +(o.inc / pv - 1).toFixed(4) : ""] }; }) },
+  ];
+}
+function vReport() {
+  if (isWorker()) return emptyMsg("הדוח זמין לבעל החנות בלבד", "");
+  if (!rMonth) rMonth = today().slice(0, 7);
+  const R = reportData(rMonth), secs = reportSections(R), cnt = k => secs.find(x => x.k === k).rows.length;
+  const chg = R.prevTot ? R.tot / R.prevTot - 1 : null, save = R.cheaper.reduce((a, r) => a + r.save, 0), miss = R.missing.reduce((a, x) => a + x.m.inc, 0);
+  const show = rCat === "all" ? secs.filter(x => x.rows.length) : secs.filter(x => x.k === rCat);
+  const table = sc => `<div class="panel"><h3>${sc.label} <span class="small muted">(${sc.rows.length})</span></h3>${sc.rows.length ? `<div class="tbl"><table><thead><tr>${sc.head.map(h => `<th>${h}</th>`).join("")}<th></th></tr></thead><tbody>${sc.rows.map(r => `<tr>${r.c.map(c => `<td>${esc(c)}</td>`).join("")}<td>${r.fix ? `<button class="btn small primary" data-act="setprice" data-pid="${esc(r.pid)}" data-v="${r.fix}">לתקן ל-${money(r.fix)}</button> ` : ""}${r.pid ? `<button class="btn small" data-act="openprod" data-pid="${esc(r.pid)}">פרטי מוצר</button>` : ""}${r.doc ? `<button class="btn small" data-act="opendoc" data-k="inv" data-id="${esc(r.doc)}">פתח מסמך</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">אין פריטים בקטגוריה הזו.</p>`}</div>`;
+  return `${demoNote()}<div class="row between"><h2>דוח חודשי: ${esc(monthLabel(rMonth))}</h2><div class="row"><input type="month" id="rMonth" value="${rMonth}"><button class="btn primary" data-act="rxlsx">הורד לאקסל</button></div></div>
+  <div class="rcards">
+    <div class="rcard">קנייה החודש<b class="num">${money(R.tot)}</b><span class="small muted">${R.docs.length} חשבוניות${chg != null ? " · " + (chg >= 0 ? "+" : "") + pct(chg) + " לעומת החודש הקודם" : ""}</span></div>
+    <div class="rcard">מחירי קנייה שעלו<b>${cnt("up")}</b></div>
+    <div class="rcard">מחירים לתקן בחנות<b>${cnt("fix")}</b></div>
+    <div class="rcard">חיסכון אפשרי אצל ספק זול<b class="num">${money(save)}</b></div>
+    <div class="rcard">זיכויים נדרשים<b class="num">${money(miss)}</b></div>
+  </div>
+  <div class="rchips"><button data-act="rcat" data-k="all" class="${rCat === "all" ? "on" : ""}">הכול</button>${secs.map(x => `<button data-act="rcat" data-k="${x.k}" class="${rCat === x.k ? "on" : ""}">${x.label} (${x.rows.length})</button>`).join("")}</div>
+  ${show.length ? show.map(table).join("") : emptyMsg("אין נתונים לחודש הזה", "בחר חודש אחר, או קלוט חשבוניות עם תאריך בחודש הזה.")}`;
+}
+after.report = () => { const i = $("#rMonth"); if (i) i.onchange = () => { rMonth = i.value || rMonth; render(); }; };
+async function saveXlsxBook(filename, sheets) {
+  if (!downloads) { toast("הורדת קבצים לא זמינה בתצוגה הזו"); return false; }
+  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+  for (const [name, rows] of sheets) { const ws = XLSX.utils.aoa_to_sheet(rows); ws["!cols"] = rows[0].map(() => ({ wch: 20 })); XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\\\/?*\[\]:]/g, " ").slice(0, 31)); }
+  const data = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  try { await downloads.save({ filename, data: new Uint8Array(data) }); return true; } catch (e) { if (e?.code !== "declined") toast("ההורדה נכשלה"); return false; }
+}
+
 /* ---------- export ---------- */
 async function saveXlsx(filename, rows) {
   if (!downloads) { toast("הורדת קבצים לא זמינה בתצוגה הזו"); return false; }
@@ -2306,6 +2422,10 @@ document.addEventListener("click", async e => {
     case "mergeno": draft.merge = false; saveDraft(); break;
     case "applyxls": applyExcel(draft.map, false); break;
     case "openprod": prodModal(b.dataset.pid); break;
+    case "rcat": rCat = b.dataset.k; render(); break;
+    case "rxlsx": { const R = reportData(rMonth || today().slice(0, 7)), secs = reportSections(R);
+      const sum = [["דוח חודשי", monthLabel(rMonth || today().slice(0, 7))], ["קנייה כולל מע\"מ", +R.tot.toFixed(2)], ["קנייה לפני מע\"מ", +R.totEx.toFixed(2)], ["חשבוניות", R.docs.length], ["חודש קודם כולל מע\"מ", +R.prevTot.toFixed(2)]];
+      await saveXlsxBook(`דוח-חודשי-${rMonth || today().slice(0, 7)}.xlsx`, [["סיכום", sum], ...secs.filter(x => x.rows.length).map(x => [x.label, [x.head, ...x.rows.map(r => r.x)]])]); break; }
     case "addprod": prodModal(null); break;
     case "setprice": b.disabled = true; await setPrice(b.dataset.pid, n(b.dataset.v)); break;
     case "newdoc": lastSaved = null; draft = newDraft(); go("inbox"); break;
